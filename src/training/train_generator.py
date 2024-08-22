@@ -154,7 +154,9 @@ def build_model(args: ModelArguments) -> PersonalizedDialogueGenerator:
         pretrained_dialogue_encoder_encoder_weights_path,
         dialogue_encoder_heads=args.num_heads,
         dialogue_encoder_add_self_loops=args.add_self_loops,
-        freeze_dialogue_encoder=True)
+        freeze_dialogue_encoder=True,
+        coherence_attn_strategy=args.coherence_attn_strategy,
+        graph_encoder_strategy=args.graph_encoder_strategy)
 
 
 def main(args: argparse.Namespace):
@@ -235,7 +237,11 @@ def main(args: argparse.Namespace):
         pretrained_dialogue_encoder_encoder_weights_path,
         # Below are the parameters for GNN Layer class (collecting to kwargs)
         num_heads=args.num_heads,
-        add_self_loops=True)
+        add_self_loops=True,
+        # For Ablation Study
+        coherence_attn_strategy=args.coherence_attn_strategy,
+        graph_encoder_strategy=args.graph_encoder_strategy,
+    )
     model = build_model(args=model_arguments)
     model = model.to(device)
     model.resize_token_embeddings(len(tokenizer))

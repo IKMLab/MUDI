@@ -67,7 +67,9 @@ def main(args):
     tokenizer = BartTokenizer.from_pretrained(args.tokenizer_name_or_path)
 
     model = PersonalizedDialogueGenerator.from_pretrained(
-        args.model_name_or_path)
+        args.model_name_or_path,
+        coherence_attn_strategy=args.coherence_attn_strategy,
+        graph_encoder_strategy=args.graph_encoder_strategy)
     model = model.to(device)
 
     model_config = PersonalizedDialogueGeneratorConfig.from_pretrained(
@@ -167,7 +169,7 @@ def main(args):
 
     os.makedirs(args.output_dir, exist_ok=True)
     with open(
-            f'{args.output_dir}/{args.model_name_or_path.split("/")[-2]}_sp_tau0.2.json',
+            f'{args.output_dir}/{args.model_name_or_path.split("/")[-2]}.json',
             'w') as f:
         json.dump(prediction, f, indent=4, ensure_ascii=False)
 
@@ -231,6 +233,18 @@ if __name__ == '__main__':
                         type=int,
                         default=3,
                         required=False)
+
+    # Ablaition Study
+    parser.add_argument('--coherence_attn_strategy',
+                        type=str,
+                        choices=['SP', 'Emb', 'SP+Emb'],
+                        default='SP+Emb',
+                        help='coherence attention strategy')
+    parser.add_argument('--graph_encoder_strategy',
+                        type=str,
+                        choices=['Attn', 'Add', 'C', 'P', 'Random', 'None'],
+                        default='Attn',
+                        help='graph encoder strategy')
 
     args = parser.parse_args()
     main(args)

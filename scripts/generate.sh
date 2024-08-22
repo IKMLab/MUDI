@@ -16,6 +16,8 @@ K_HOP=3
 N_TURNS=5
 TAU=0.4
 TOP_K_RELATIONS=5
+COHERENCE_ATTENTION_STRATEGY="SP+Emb"
+GRAPH_ENCODER_STRATEGY="Attn"
 # ========================================================================
 
 
@@ -23,7 +25,7 @@ python3 src/generate.py \
   --data_dir $DATASET_DIR \
   --processed_data_dir $DATASET_DIR/processed_valid_3-hop_5-turns/ \
   --data_name valid_self_original_coherence.pkl \
-  --processed_data_name processed_valid_self_original.pt \
+  --processed_data_name processed_valid_self_original_coherence.pt \
   --output_dir $OUTPUT_DIR \
   --model_name_or_path $MODEL_NAME_OR_PATH/model \
   --tokenizer_name_or_path $MODEL_NAME_OR_PATH/tokenizer \
@@ -33,4 +35,6 @@ python3 src/generate.py \
   --no-reverse_edge \
   --batch_size 1 \
   --tau $TAU \
-  --top_k_relations $TOP_K_RELATIONS
+  --top_k_relations $TOP_K_RELATIONS \
+  --coherence_attn_strategy $COHERENCE_ATTENTION_STRATEGY \
+  --graph_encoder_strategy $GRAPH_ENCODER_STRATEGY \

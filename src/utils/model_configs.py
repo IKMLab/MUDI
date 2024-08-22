@@ -52,6 +52,10 @@ class PersonalizedDialogueGeneratorConfig(BartConfig):
                  dialogue_encoder_heads: int = 4,
                  dialogue_encoder_add_self_loops: bool = True,
                  freeze_dialogue_encoder: bool = False,
+                 coherence_attn_strategy: Literal['SP', 'Emb',
+                                                  'SP+Emb'] = 'SP+Emb',
+                 graph_encoder_strategy: Literal['Attn', 'Add', 'C', 'P',
+                                                 'Random', 'None'] = 'Attn',
                  **bart_config_kwargs: dict[BartConfig]):
 
         self.dialogue_encoder_input_dim = dialogue_encoder_input_dim
@@ -72,6 +76,9 @@ class PersonalizedDialogueGeneratorConfig(BartConfig):
         self.summary_first_dropout = 0.1
         self.summary_proj_to_labels = True
         self.summary_use_proj = True
+
+        self.coherence_attn_strategy = coherence_attn_strategy
+        self.graph_encoder_strategy = graph_encoder_strategy
 
         super().__init__(**bart_config_kwargs)
 

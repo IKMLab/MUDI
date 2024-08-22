@@ -13,6 +13,8 @@ N_TURNS=5
 N_LAYERS=2
 N_HEADS=4
 DIM=512
+COHERENCE_ATTENTION_STRATEGY="SP+Emb"
+GRAPH_ENCODER_STRATEGY="Attn"
 # ========================================================================
 
 # If you want to use the Weights & Biases (Wandb) logging, please set the following variables:
@@ -23,7 +25,8 @@ WANDB_ENTITY=""
 # Project name for Weights & Biases (Wandb)
 WANDB_PROJECT=""
 # Run name for Weights & Biases (Wandb)
-WANDB_RUN_NAME="BART_${GNN_LAYER_TYPE}_${N_LAYERS}layers_${K_HOP}hop_${DIM}dim_${N_HEADS}heads_ConvAI2"
+WANDB_RUN_NAME="BART_${GNN_LAYER_TYPE}_${N_LAYERS}layers_${K_HOP}hop_${DIM}dim_${N_HEADS}heads"
+WANDB_RUN_NAME+="_${COHERENCE_ATTENTION_STRATEGY}_${GRAPH_ENCODER_STRATEGY}_ConvAI2"
 # ========================================================================
 
 python3 src/training/train_generator.py \
@@ -43,6 +46,8 @@ python3 src/training/train_generator.py \
     --pretrained_dialogue_encoder_weights_path $GRAPH_ENCODER_PATH \
     --directed \
     --no-reverse_edge \
+    --coherence_attn_strategy $COHERENCE_ATTENTION_STRATEGY \
+    --graph_encoder_strategy $GRAPH_ENCODER_STRATEGY \
     --embedding_dim $DIM \
     --batch_size 8 \
     --epochs 100 \

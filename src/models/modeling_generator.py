@@ -6,7 +6,6 @@ from transformers import BartForConditionalGeneration, BartTokenizer
 from transformers.modeling_utils import SequenceSummary
 from transformers.models.bart.modeling_bart import (
     BART_ATTENTION_CLASSES,
-    BartClassificationHead,
     BartDecoderLayer,
 )
 
@@ -34,8 +33,10 @@ class CoherenceAwareBartDecoderLayer(BartDecoderLayer):
     def __init__(self, config):
         super().__init__(config)
 
-        # self.coherence_embeddings = nn.Embedding(len(COHERENCE_RELATIONS),
-        #                                          config.d_model)
+        self.coherence_attn_strategy = config.coherence_attn_strategy
+        if config.coherence_attn_strategy in ('Emb', 'SP+Emb'):
+            self.coherence_embeddings = nn.Embedding(len(COHERENCE_RELATIONS),
+                                                     config.d_model)
         self.coherence_rels_indices = None
         self.coherence_rels_embs = None
         self.coherence_attn = BART_ATTENTION_CLASSES[
@@ -138,34 +139,29 @@ class CoherenceAwareBartDecoderLayer(BartDecoderLayer):
         device = hidden_states.device
         for rels_index, rel_embs in zip(self.coherence_rels_indices,
                                         self.coherence_rels_embs):
-            # NOTE: (1) 使用 additional embedding
-            # coh_rel_embeds = self.coherence_embeddings(
-            #     torch.tensor(rels_index, dtype=torch.long, device=device))
-            # NOTE: (2) 調整成使用 special token 的 embedding
-            coh_rel_embeds = rel_embs
-            # NOTE: (3) 使用 additional embedding + special token
-            # coh_rel_embeds = self.coherence_embeddings(
-            #     torch.tensor(rels_index, dtype=torch.long, device=device))
-            # coh_rel_embeds = torch.cat([coh_rel_embeds, rel_embs])
+            if self.coherence_attn_strategy == 'SP':
+                # Only use the special token embeddings
+                coh_rel_embeds = rel_embs
+            elif self.coherence_attn_strategy == 'Emb':
+                # Only use the coherence embeddings
+                coh_rel_embeds = self.coherence_embeddings(
+                    torch.tensor(rels_index, dtype=torch.long, device=device))
+            elif self.coherence_attn_strategy == 'SP+Emb':
+                # Concatenate the coherence embeddings and special token embeddings
+                coh_rel_embeds = self.coherence_embeddings(
+                    torch.tensor(rels_index, dtype=torch.long, device=device))
+                coh_rel_embeds = torch.cat([coh_rel_embeds, rel_embs])
 
-            # coh_rel_attn_mask = torch.ones(coh_rel_embeds.size(0),
-            #                                MAX_MODEL_SEQ_LENGTH,
-            #                                device=device)
             coh_rel_attn_mask = torch.ones(coh_rel_embeds.size(0),
                                            hidden_states.size(1),
                                            device=device)
 
-            # pad_size = MAX_MODEL_SEQ_LENGTH - coh_rel_embeds.size(0)
             pad_size = hidden_states.size(1) - coh_rel_embeds.size(0)
             coh_rel_embeds = torch.cat([
                 coh_rel_embeds,
                 torch.zeros(pad_size, coh_rel_embeds.size(1), device=device)
             ],
                                        dim=0)
-            # coh_rel_attn_mask = torch.cat([
-            #     coh_rel_attn_mask,
-            #     torch.zeros(pad_size, MAX_MODEL_SEQ_LENGTH, device=device)
-            # ])
             coh_rel_attn_mask = torch.cat([
                 coh_rel_attn_mask,
                 torch.zeros(pad_size, hidden_states.size(1), device=device)
@@ -223,21 +219,16 @@ class PersonalizedDialogueGenerator(BartForConditionalGeneration):
     config_class = PersonalizedDialogueGeneratorConfig
 
     PROMPT_TEMPLATE_NO_INSTRUCTION = '{response_types}'
-    PROMPT_TEMPLATE_V1 = 'Please generate a coherent response based on the given response types: {response_types}'
-    PROMPT_TEMPLATE_V2 = 'Generate a response that incorporates {response_types} by considering the dialogue history and aligning with the persona traits. Ensure the response maintains coherence with the previous exchanges.'
-    PROMPT_TEMPLATE_V3 = "Generate a response that incorporates {response_types} by considering the dialogue history and aligning with user's persona traits. Ensure the response maintains coherence with the previous exchanges. Please generate more long and informative responses and give more details."
-    PROMPT_TEMPLATE_V4 = "Considering the dialogue history <query> and the user's persona traits <persona>, please generate a detailed and informative response. The response should reflect the specified response types: {response_types}, and aim to be as lengthy and comprehensive as possible to provide more details."
-    PROMPT_TEMPLATE_V5 = 'Query: "<query>". Persona: "<persona>". Generate a personalized response is align with the specified response type: {response_types}.'
-    PROMPT_TEMPLATE_V6 = 'Generate a response based on the dialogue context "<query>", considering the persona "<persona>", and align the response with the specified type "{response_types}".'
-    # PROMPT_TEMPLATE_V6 = 'Generate a response that incorporates "{response_types}" by considering the query: <query> and persona: <persona> describe.'
-    PROMPT_TEMPLATE_V7 = 'Question: "<query>". \n\n Please play someone with the following role persona: "<persona>". \n\n Generate a personalized response is align with the specified type: {response_types}.'
-    CURRENT_PROMPT_TEMPLATE = PROMPT_TEMPLATE_V4
+    PROMPT_TEMPLATE = "Considering the dialogue history <query> and the user's persona traits <persona>, please generate a detailed and informative response. The response should reflect the specified response types: {response_types}, and aim to be as lengthy and comprehensive as possible to provide more details."
+    CURRENT_PROMPT_TEMPLATE = PROMPT_TEMPLATE
 
     def __init__(self, config: PersonalizedDialogueGeneratorConfig):
         super().__init__(config)
 
         self.use_coherence_attention = False
         self.register_modules(config)
+
+        self.graph_encoder_strategy = config.graph_encoder_strategy
 
         self.dialogue_encoder = DGatForCoherenceAwareDialogueEncoding(
             input_dim=config.dialogue_encoder_input_dim,
@@ -256,8 +247,9 @@ class PersonalizedDialogueGenerator(BartForConditionalGeneration):
         )
 
         if config.dialogue_encoder_pretrained_weights_path:
-            self.dialogue_encoder.load_state_dict(
-                torch.load(config.dialogue_encoder_pretrained_weights_path), strict=False)
+            self.dialogue_encoder.load_state_dict(torch.load(
+                config.dialogue_encoder_pretrained_weights_path),
+                                                  strict=False)
 
         if config.freeze_dialogue_encoder:
             for param in self.dialogue_encoder.parameters():
@@ -272,13 +264,6 @@ class PersonalizedDialogueGenerator(BartForConditionalGeneration):
         self.weights_decider = nn.Sequential(
             nn.Linear(config.d_model * 2, config.d_model), nn.Sigmoid())
 
-        # self.classification_head = BartClassificationHead(
-        #     config.d_model,
-        #     config.d_model,
-        #     len(COHERENCE_RELATIONS),
-        #     config.classifier_dropout,
-        # )
-
         # Multiple Choice Head
         # Binary Classification: True is the correct answer, False is the incorrect answer
         self.classification_head = SequenceSummary(config)
@@ -289,7 +274,6 @@ class PersonalizedDialogueGenerator(BartForConditionalGeneration):
         self.max_length = MAX_MODEL_SEQ_LENGTH
 
     def add_soft_prompt(self, n_tokens=20):
-        # NOTE: 2024/07/04 調整成 Soft prompt (參考 https://github.com/kipgparker/soft-prompt-tuning)
         self.n_tokens = n_tokens
         embedder = SoftPromptEmbedder(wte=self.model.shared,
                                       n_tokens=self.n_tokens,
@@ -322,11 +306,7 @@ class PersonalizedDialogueGenerator(BartForConditionalGeneration):
             use_resp_type_prediction_in_training=
             use_resp_type_prediction_in_training)
 
-        # coherence_relation_preds = dial_encoder_outputs.last_resp_type_seq_preds \
-        #     if not self.training or use_resp_type_prediction_in_training \
-        #     else dial_encoder_outputs.last_resp_type_labels
-        # NOTE: ablation study for no "next response type prediction"
-        coherence_relation_preds = dial_encoder_outputs.last_coh_rel_preds \
+        coherence_relation_preds = dial_encoder_outputs.last_resp_type_seq_preds \
             if not self.training or use_resp_type_prediction_in_training \
             else dial_encoder_outputs.last_resp_type_labels
 
@@ -367,7 +347,7 @@ class PersonalizedDialogueGenerator(BartForConditionalGeneration):
             coherence_relation_preds_embs.append(
                 self.model.decoder.embed_tokens(rel_tokens.to(device)))
 
-        # NOTE: 2024/07/04 調整成 Soft prompt (參考 https://github.com/kipgparker/soft-prompt-tuning)
+        # Discrete Prompt
         prompt_inputs = [
             self.format_prompt(rels, self.CURRENT_PROMPT_TEMPLATE)
             for rels in coherence_relation_preds_label
@@ -377,19 +357,6 @@ class PersonalizedDialogueGenerator(BartForConditionalGeneration):
                                           padding='max_length',
                                           truncation=True,
                                           return_tensors='pt')
-        '''
-        prompt_inputs = [
-            self.format_prompt(
-                rels, self.PROMPT_TEMPLATE_NO_INSTRUCTION if
-                not self.mix_soft_and_hard_prompt else self.CURRENT_PROMPT_TEMPLATE)
-            for rels in coherence_relation_preds_label
-        ]
-        prompt_encodings = self.tokenizer(prompt_inputs,
-                                          add_special_tokens=False,
-                                          padding='max_length',
-                                          truncation=True,
-                                          return_tensors='pt')
-        '''
 
         lm_labels = []
         decoder_input_ids = []
@@ -436,12 +403,6 @@ class PersonalizedDialogueGenerator(BartForConditionalGeneration):
                         torch.ones(num_response_tokens)
                     ]))
 
-                # NOTE: no prompt
-                # decoder_input_ids.append(
-                #     response_input_ids.to(device))
-                # decoder_attention_mask.append(
-                #     torch.ones(num_response_tokens))
-
         decoder_input_ids = torch.stack(decoder_input_ids)
         decoder_attention_mask = torch.stack(decoder_attention_mask)
         generator_input['decoder_input_ids'] = decoder_input_ids.to(device)
@@ -456,6 +417,9 @@ class PersonalizedDialogueGenerator(BartForConditionalGeneration):
             lm_labels = None
             cls_labels = None
 
+            if 'multiple_choice_label' in generator_input:
+                del generator_input['multiple_choice_label']
+
         if self.use_coherence_attention:
             for layer in self.model.decoder.layers:
                 layer.coherence_rels_indices = coherence_relation_preds_index
@@ -464,50 +428,70 @@ class PersonalizedDialogueGenerator(BartForConditionalGeneration):
         text_encoder_decoder_outputs = self.model(**generator_input,
                                                   encoder_outputs=None,
                                                   output_attentions=True)
-        # dial_encoder_hidden_states = dial_encoder_outputs.personalized_graph_embeddings
-        dial_encoder_hidden_states = torch.rand_like(dial_encoder_outputs.personalized_graph_embeddings, device=device)
-        dial_encoder_decoder_outputs = self.model(
-            attention_mask=torch.ones_like(
-                generator_input['decoder_attention_mask']),
-            decoder_input_ids=generator_input['decoder_input_ids'],
-            decoder_attention_mask=generator_input['decoder_attention_mask'],
-            encoder_outputs=(
-                self.projector(dial_encoder_hidden_states).unsqueeze(1).expand(
-                    -1, self.max_length if not is_generation else
-                    generator_input['decoder_attention_mask'].size(1),
-                    -1), None, None),
-            output_attentions=True)
 
-        text_encoder_decoder_hidden_states = text_encoder_decoder_outputs.last_hidden_state
-        dial_encoder_decoder_hidden_states = dial_encoder_decoder_outputs.last_hidden_state
-        residual = text_encoder_decoder_hidden_states + dial_encoder_decoder_hidden_states
-        text_encoder_alpha = self.weights_decider(
-            torch.cat([
-                text_encoder_decoder_hidden_states,
-                dial_encoder_decoder_hidden_states
-            ],
-                      dim=-1))
+        if self.graph_encoder_strategy != 'None':
+            if self.graph_encoder_strategy == 'Attn':
+                dial_encoder_hidden_states = dial_encoder_outputs.personalized_graph_embeddings
+            elif self.graph_encoder_strategy == 'Add':
+                dial_encoder_hidden_states = dial_encoder_outputs.context_graph_embeddings + \
+                    dial_encoder_outputs.persona_graph_embeddings
+            elif self.graph_encoder_strategy == 'C':
+                dial_encoder_hidden_states = dial_encoder_outputs.context_graph_embeddings
+            elif self.graph_encoder_strategy == 'P':
+                dial_encoder_hidden_states = dial_encoder_outputs.persona_graph_embeddings
+            elif self.graph_encoder_strategy == 'Random':
+                dial_encoder_hidden_states = torch.rand_like(
+                    dial_encoder_outputs.personalized_graph_embeddings,
+                    device=device)
 
-        text_encoder_alpha_mask = []
-        dial_encoder_alpha_mask = []
-        for alpha in text_encoder_alpha:
-            text_encoder_mask = torch.where(alpha > tau, torch.ones_like(alpha),
-                                            torch.zeros_like(alpha))
-            text_encoder_alpha_mask.append(text_encoder_mask)
+            dial_encoder_decoder_outputs = self.model(
+                attention_mask=torch.ones_like(
+                    generator_input['decoder_attention_mask']),
+                decoder_input_ids=generator_input['decoder_input_ids'],
+                decoder_attention_mask=generator_input[
+                    'decoder_attention_mask'],
+                encoder_outputs=(self.projector(
+                    dial_encoder_hidden_states).unsqueeze(1).expand(
+                        -1, self.max_length if not is_generation else
+                        generator_input['decoder_attention_mask'].size(1),
+                        -1), None, None),
+                output_attentions=True)
 
-            dial_encoder_mask = torch.where(alpha < 1 - tau,
-                                            torch.ones_like(alpha),
-                                            torch.zeros_like(alpha))
-            dial_encoder_alpha_mask.append(dial_encoder_mask)
+            text_encoder_decoder_hidden_states = text_encoder_decoder_outputs.last_hidden_state
+            dial_encoder_decoder_hidden_states = dial_encoder_decoder_outputs.last_hidden_state
+            residual = text_encoder_decoder_hidden_states + dial_encoder_decoder_hidden_states
+            # Dynamic Weighted Aggregation
+            text_encoder_alpha = self.weights_decider(
+                torch.cat([
+                    text_encoder_decoder_hidden_states,
+                    dial_encoder_decoder_hidden_states
+                ],
+                          dim=-1))
 
-        text_encoder_alpha_mask = torch.stack(text_encoder_alpha_mask)
-        dial_encoder_alpha_mask = torch.stack(dial_encoder_alpha_mask)
-        weighted_hidden_states = text_encoder_alpha * \
-                text_encoder_alpha_mask * text_encoder_decoder_hidden_states \
-                + (1 - text_encoder_alpha) * \
-                dial_encoder_alpha_mask * dial_encoder_decoder_hidden_states
+            text_encoder_alpha_mask = []
+            dial_encoder_alpha_mask = []
+            for alpha in text_encoder_alpha:
+                text_encoder_mask = torch.where(alpha > tau,
+                                                torch.ones_like(alpha),
+                                                torch.zeros_like(alpha))
+                text_encoder_alpha_mask.append(text_encoder_mask)
 
-        outputs = residual + weighted_hidden_states
+                dial_encoder_mask = torch.where(alpha < 1 - tau,
+                                                torch.ones_like(alpha),
+                                                torch.zeros_like(alpha))
+                dial_encoder_alpha_mask.append(dial_encoder_mask)
+
+            text_encoder_alpha_mask = torch.stack(text_encoder_alpha_mask)
+            dial_encoder_alpha_mask = torch.stack(dial_encoder_alpha_mask)
+            weighted_hidden_states = text_encoder_alpha * \
+                    text_encoder_alpha_mask * text_encoder_decoder_hidden_states \
+                    + (1 - text_encoder_alpha) * \
+                    dial_encoder_alpha_mask * dial_encoder_decoder_hidden_states
+
+            outputs = residual + weighted_hidden_states
+        else:
+            outputs = text_encoder_decoder_outputs.last_hidden_state
+
         lm_logits = self.lm_head(outputs)
         lm_logits = lm_logits + self.final_logits_bias.to(lm_logits.device)
 
@@ -523,17 +507,6 @@ class PersonalizedDialogueGenerator(BartForConditionalGeneration):
         cls_logits = None
         cls_loss = None
         if cls_labels is not None:
-            # Using BartClassificationHead
-            # eos_mask = generator_input['decoder_input_ids'].eq(
-            #     self.config.eos_token_id).to(outputs.device)
-            # sentence_representation = outputs[eos_mask, :]
-            # cls_logits = self.classification_head(sentence_representation)
-
-            # loss_fct = nn.BCEWithLogitsLoss()
-            # cls_labels = cls_labels.to(cls_logits.device)
-            # cls_loss = loss_fct(cls_logits, cls_labels)
-
-            # Using SequenceSummary
             eos_mask = generator_input['decoder_input_ids'].eq(
                 self.config.eos_token_id).to(outputs.device)
             eos_indices = torch.argmax(eos_mask.to(torch.int), dim=1)
@@ -558,9 +531,6 @@ class PersonalizedDialogueGenerator(BartForConditionalGeneration):
             cls_logits=cls_logits,
             cls_labels=cls_labels.to(torch.float)
             if not is_generation else None,
-            # cls_loss=0.0,
-            # cls_logits=0.0,
-            # cls_labels=None,
             dial_encoder_outputs=dial_encoder_outputs)
 
     def remove_padding_tokens(self, input_ids: torch.Tensor,
@@ -568,20 +538,15 @@ class PersonalizedDialogueGenerator(BartForConditionalGeneration):
         return [tokens[mask == 1] for tokens, mask in zip(input_ids, masks)]
 
     def format_prompt(self, rels: list[str], prompt: str) -> str:
-        # The comment below is referred to not use the special tokens in the prompt
         if len(rels) >= 3:
-            # response_types = ', '.join(rels[:-1])
-            # response_types += f', and {rels[-1]}'
             response_types = ''
             for rel in rels[:-1]:
                 response_types += f'{NEW_SPEICAL_TOKENS_MAP[rel.lower()]} {rel}, '
             response_types += f'and {NEW_SPEICAL_TOKENS_MAP[rels[-1].lower()]} {rels[-1]}'
         elif len(rels) == 2:
-            # response_types = f'{rels[0]} and {rels[1]}'
             response_types = f'{NEW_SPEICAL_TOKENS_MAP[rels[0].lower()]} {rels[0]}'
             response_types += f' and {NEW_SPEICAL_TOKENS_MAP[rels[1].lower()]} {rels[1]}'
         else:
-            # response_types = ', '.join(rels)
             response_types = f'{NEW_SPEICAL_TOKENS_MAP[rels[0].lower()]} {rels[0]}'
 
         return prompt.format(response_types=response_types)
@@ -592,7 +557,6 @@ class PersonalizedDialogueGenerator(BartForConditionalGeneration):
         weight: dict[dict, float] = None
     ) -> PersonalizedDialogueGeneratorTrainerOutput:
         total_loss = outputs.loss + outputs.cls_loss
-        # total_loss = outputs.loss
 
         losses = PersonalizedDialogueGeneratorTrainerOutput(
             total_loss=total_loss,
@@ -606,11 +570,10 @@ class PersonalizedDialogueGenerator(BartForConditionalGeneration):
             total_loss += dial_encoder_outputs.total_loss.item()
             losses.total_loss = total_loss
 
-            losses.dial_encoder_node_loss = dial_encoder_outputs.node_loss
             losses.dial_encoder_coh_rel_cls_loss = dial_encoder_outputs.coh_rel_cls_loss
-            losses.dial_encoder_link_prediction_loss = dial_encoder_outputs.link_prediction_loss
             losses.dial_encoder_next_resp_type_direct_loss = dial_encoder_outputs.next_resp_type_direct_loss
             losses.dial_encoder_next_resp_type_seq_loss = dial_encoder_outputs.next_resp_type_seq_loss
+            losses.dial_encoder_link_prediction_loss = dial_encoder_outputs.link_prediction_loss
 
         return losses
 

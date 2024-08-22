@@ -346,6 +346,18 @@ def parse_generator_args():
                         default=1.0,
                         help='loss weight for next response type prediction')
 
+    # Ablaition Study
+    parser.add_argument('--coherence_attn_strategy',
+                        type=str,
+                        choices=['SP', 'Emb', 'SP+Emb'],
+                        default='SP+Emb',
+                        help='coherence attention strategy')
+    parser.add_argument('--graph_encoder_strategy',
+                        type=str,
+                        choices=['Attn', 'Add', 'C', 'P', 'Random', 'None'],
+                        default='Attn',
+                        help='graph encoder strategy')
+
     # Validation
     parser.add_argument(
         '--endure_times',
