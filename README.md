@@ -274,7 +274,47 @@ The structure of the root directory should be as follows:
 ├── ...
 ```
 
-In order to evaluate the quality of the generated responses, you can run the following code:
+We also using the **QuantiDCE** and **DEAM** to evaluate the coherence of the generated responses. You can download the QuantiDCE and DEAM models from the following links. 
+
+* [QuantiDCE](https://github.com/James-Yip/QuantiDCE)
+* [DEAM](https://github.com/PlusLabNLP/DEAM?tab=readme-ov-file)
+
+Since the official repositories do not provide convenient inference scripts, we have organized the inference results in the `coherence_evaluation` folder. To proceed with the inference, please place the contents of the corresponding metric's folder into the root directory of the official method's repository and follow the steps outlined below:
+* **QuantiDCE**: 
+   1. Replace the `util/opt.py` with the provided `opt.py` file. 
+   2. Put the `quantidce_inference.py` file in the **QuantiDCE** `root` directory.
+   3. Put the `compute_coherence.sh` file in the **QuantiDCE** `script` directory.
+   4. Replace the `INPUT_FILE_PATH` and `OUTPUT_FILE_PATH` in the `compute_coherence.sh` file with the corresponding paths.
+   6. Run the `compute_coherence.sh` file to evaluate the coherence of the generated responses.
+
+      ```bash
+      cd script
+      sh compute_coherence.sh
+      ```
+
+* **DEAM**:
+   1. Place the contents of the `coherence_evaluation/DEAM/` folder into the root directory of the DEAM `root` directory.
+   2. Run the `convert_format.py` to convert the data format to the DEAM format.
+
+      ```bash
+      python inference/convert_format.py --model_type mudi -i <input_file_path>
+      ```
+
+      This will generate files in the same directory as input_file_path with the same name, appended with `-single_turn.txt` and `-multi_turn.txt`.
+   3. Run the `deam_inference.py` to evaluate the coherence of the generated responses.
+
+      ```bash
+      py inference/deam_inference.py --model_path coh_models --mode predict --eval_data_path <input_file_path>
+      ```
+
+      The output will be default saved in the `coh_models/xxx.txt` file.
+   4. Run the `compute_average_score.py` to compute the average score of the coherence evaluation scores.
+
+      ```bash
+      python inference/compute_average_score.py -i coh_models/xxx.txt
+      ```
+
+Furthermore, we provide the evaluation script to evaluate the generated responses with the other metrics. You can run the following code to get the main results (coherence evaluation mentioned above is not included in the main results):
 
 ```bash
 sh scripts/evaluate.sh  -i <generated_responses_file_path> -o <output_csv_file_path>
