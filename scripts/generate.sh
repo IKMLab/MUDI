@@ -22,7 +22,7 @@ TOP_K_RELATIONS=5
 python3 src/generate.py \
   --data_dir $DATASET_DIR \
   --processed_data_dir $DATASET_DIR/processed_valid_3-hop_5-turns/ \
-  --data_name valid_self_original.pkl \
+  --data_name valid_self_original_coherence.pkl \
   --processed_data_name processed_valid_self_original.pt \
   --output_dir $OUTPUT_DIR \
   --model_name_or_path $MODEL_NAME_OR_PATH/model \
