@@ -170,6 +170,8 @@ wandb/
 # Models
 ckpts/
 checkpoints/
+bart_score.pth
+consistent_model/
 
 # data
 dataset/
