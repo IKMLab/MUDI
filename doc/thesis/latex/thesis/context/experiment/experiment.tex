@@ -1,0 +1,766 @@
+% ------------------------------------------------
+\StartChapter{Experiment}{chapter:experiment}
+% ------------------------------------------------
+This chapter presents an evaluation of our proposed methods for personalized dialogue generation. We conducted experiments on the ConvAI2 dataset. Our approach surpasses previous methods in multiple evaluative aspects of response generation, showcasing superior results in personalized dialogue generation.
+
+\section{Datasets}
+ConvAI2 \cite{dinan-etal-2019-convai2} is a chit-chat dataset based on PersonaChat \cite{zhang-etal-2018-personalizing}. The dataset comprises 17,878 and 1,000 multi-turn dialogues for the training and development sets, respectively, with a total of 131,438 and 7,801 utterances. It features 1,155 and 100 unique persona descriptions for the training and development sets, respectively. Each conversation participant who are assigned at least five persona descriptions, which are selected from these unique personas. Examples of the dialogue can be seen in Table \ref{table:convai2-example}.
+
+\section{Baselines}
+For comparison, we have selected the following baselines: (1) \textbf{Personalized Dialogue Generation methods}: We compare our approach with established text-description-based personalized models such as BOB \cite{song-etal-2021-bob}, LMEDR \cite{chen-etal-2023-memorize}, and PAA \cite{huang-etal-2023-paa}, which are recognized for their strong performance. (2) \textbf{General Dialogue Generation methods}: To ensure a fair evaluation, we include PLATO \cite{bao-etal-2020-plato} and DialoGPT \cite{zhang-etal-2019-dialogpt}. For PLATO, following the original publication's methodology, we prepend the persona descriptions as part of the knowledge to the entire context during inference. For DialoGPT, we adopt a post-processing approach as suggested by \cite{zhou-etal-2023-simoap}. We first generate multiple responses as candidates from DialoGPT for the same context and then select the response that is most consistent with the persona and most relevant to the context as the final output. (3) \textbf{Large Language Models (LLMs)}: We also test the ability of LLMs, specifically GPT-4, in personalized response generation, which utilizes prompting technologies. The prompt can be seen in Figure \ref{fig:llm_inference_prompt}.
+
+% ----------------------------------------------
+% Table: ConvAI2 Dataset Example
+% ----------------------------------------------
+
+\begin{table}[ht]
+\centering
+\def\arraystretch{1.4}%
+\begin{tabular}{|p{7cm}|p{7cm}|}
+\hline
+
+\rowcolor[RGB]{204,217,245}
+\multicolumn{1}{|c|}{\textbf{PERSON 1's Persona}} & \multicolumn{1}{|c|}{\textbf{PERSON 2's Persona}} \\
+\hline
+I like to ski. & I am an artist. \\
+My wife does not like me anymore. & I have four children. \\
+I have went to Mexico 4 times this year. & I recently got a cat. \\
+I hate Mexican food. & I enjoy walking for exercise. \\
+I like to eat cheetos. & I love watching Game of Thrones. \\
+\hline
+
+\rowcolor[RGB]{204,217,245}
+\multicolumn{2}{|c|}{\textbf{Dialogue}} \\
+\hline
+
+\multicolumn{2}{|p{14cm}|}{[PERSON 1:] Hi} \\
+\multicolumn{2}{|p{14cm}|}{[PERSON 2:] Hello ! How are you today?} \\
+\multicolumn{2}{|p{14cm}|}{[PERSON 1:] I am good thank you , how are you.} \\
+\multicolumn{2}{|p{14cm}|}{[PERSON 2:] Great, thanks ! My children and I were just about to watch Game of Thrones.} \\
+\multicolumn{2}{|p{14cm}|}{[PERSON 1:] Nice! How old are your children?} \\
+\multicolumn{2}{|p{14cm}|}{[PERSON 2:] I have four that range in age from 10 to 21. You?} \\
+\multicolumn{2}{|p{14cm}|}{[PERSON 1:] I do not have children at the moment.} \\
+\multicolumn{2}{|p{14cm}|}{[PERSON 2:] That just means you get to keep all the popcorn for yourself.} \\
+\multicolumn{2}{|p{14cm}|}{[PERSON 1:] And Cheetos at the moment!} \\
+\multicolumn{2}{|p{14cm}|}{[PERSON 2:] Good choice. Do you watch Game of Thrones?} \\
+\multicolumn{2}{|p{14cm}|}{[PERSON 1:] No, I do not have much time for TV.} \\
+\multicolumn{2}{|p{14cm}|}{[PERSON 2:] I usually spend my time painting. But, I love the show.} \\
+
+\hline
+\end{tabular}
+\caption{Example dialogue from the ConvAI2 dataset. During training, the model acts as a conversational agent, playing the role of one of the participants to generate personalized responses.}
+\label{table:convai2-example}
+\end{table}
+
+\section{Implementation Details}
+The \textbf{MUDI} is mainly implemented in PyTorch. Our backbone Generator is BART-large\footnote[2]{https://huggingface.co/facebook/bart-large}. For Generator training, we train it using a batch size of 4 on 1 NVIDIA A100 80GB
+GPU via the AdamW optimizer with a learning rate of \(5 \times 10^{-6}\) and a
+weight decay of 0.01. For the Dialogue Graph Encoder training, it is conducted on a single NVIDIA RTX 4090 GPU using a batch size of 512. The training also employs the AdamW optimizer, but with a learning rate of \(2 \times 10^{-5}\) and the same weight decay of 0.01. In the Dialogue Graph Encoder, we initially employ the SBERT model "all-mpnet-base-v2"\footnote[3]{https://huggingface.co/sentence-transformers/all-mpnet-base-v2} to encode both the utterances and persona sentences, thereby initializing the node embeddings. We construct the Dialogue Graph by keeping the 3-hop neighbors. The model employs a 2-layer GNN with 4 multi-heads and a hidden dimension of 512. The weights for the different tasks are as follows: the weight of the Coherence Relation Classification task is 1.5, the weight of both types of Next Response Type Prediction tasks is 1.5, and the weight of the Link Prediction task is 1.2. For training the generator, we retain the most recent 5 turns of dialogue as historical context and choose the top-3 predicted response types for the prompt. We set \(\tau = 0.2\) for the Dynamic Weighted Aggregation.
+
+\InsertFigure
+[scale=0.46,
+caption={The prompt of LLM inference on Personalized Dialogue Generation task.},
+label={fig:llm_inference_prompt}
+]
+{./context/experiment/images/llm_inference_prompt.png}
+
+\section{Evaluation Metrics}
+\subsection{Automatic Metrics}
+We assess the quality of dialogue responses from four perspectives: 
+
+(1) \textbf{Text-similarity}: To evaluate the similarity between the generated responses and the ground-truth responses, we employ BLEU \cite{papineni-etal-2002-bleu} and ROUGE \cite{lin-2004-rouge} metrics, which focus on the word overlap level. Additionally, we utilize BERTScore \cite{zhang-etal-2020-bert-score}, which measures the semantic similarity between generated responses and ground-truth using contextual embeddings from BERT. This helps capture nuances that traditional overlap-based metrics might miss.
+
+(2) \textbf{Diversity}: We assess the diversity and informativeness of the generated responses at token, sentence, and corpus levels. We utilize Distinct-n (Dist-$n$) metrics \cite{li-etal-2016-diversity} to measure the proportion of unique n-grams (n=1) relative to the total number of n-grams in the generated responses. Additionally, we employ Entropy-n (Ent-$n$) \cite{zhang-etal-2018-generating} to evaluate the uncertainty or randomness of the distribution of n-grams (n=1) in the generated text. We also calculate the Unique Sentence Ratio (USR) \cite{li-etal-2020-generate}, which quantifies text diversity by measuring the proportion of unique sentences among all predicted responses.
+
+(3) \textbf{Coherence}: Previous studies often omit explicit evaluations of Coherence, assuming that Fluency can also measure the coherence of dialogues. However, this approach does not directly account for the coherence of generated responses with the context and query, an aspect often presumed to be covered by fluency. To measure this unexplored dimension, our research incorporates specific coherence metrics to provide a more accurate and holistic assessment of response quality. Specifically, we employ several metrics. Firstly, we use QuantiDCE \cite{ye-etal-2021-towards-quantifiable} and DEAM \cite{ghazarian-etal-2022-deam}, which are state-of-the-art metrics in dialogue coherence evaluation. These metrics assess both how logically the responses align with the preceding query or the entire context within the dialogue, and how well the utterances in a conversation are unified, leading to a consistent and coherent interaction. Additionally, we utilize BARTScore \cite{yuan-etal-2021-bartscore} to measure coherence under the faithfulness setting discussed in the paper.
+
+(4) \textbf{Personalization}: To assess the personalization of the generated responses, we first measure the alignment between the persona and responses. First, we apply Consistency Score (C.Score) \cite{madotto-etal-2019-personalizing}, which leverages a NLI model to predict consistency between response and persona. Additionally, we utilize the BARTScore \cite{yuan-etal-2021-bartscore}, which provides a method to calculate the semantic overlaps between texts. Specifically, we compute: (a) Precision (persona → response): This measures how closely the generated responses adhere to the input persona, reflecting the degree to which the model captures persona-specific attributes in the response. (b) Recall (response → persona): This assesses whether all aspects of the persona are sufficiently covered by the responses, indicating the comprehensiveness of the persona information in the generated text. we report the F1 Score is then calculated from these Precision and Recall scores to provide a balanced measure of personalization, capturing both the accuracy and completeness of the generated responses in reflecting the specified persona.
+
+Moreover, to better assess whether the generated responses accurately incorporate important features from the persona or the query, we utilize Large Language Models (LLMs)\footnote[4]{https://huggingface.co/meta-llama/Meta-Llama-3-70B-Instruct} to identify key terms (features) from these persona descriptions or dialogue utterances. We then employ a NLI model to calculate the Feature Coverage Ratio (FCR), ensuring that critical features are effectively represented in the responses. The example of the feature-annotated table mentioned earlier is shown in Table \ref{table:fcr-feature-annotated-example}.
+
+\begin{table}[H]
+\centering
+\def\arraystretch{1.2}%
+\begin{tabular}{|l|c|}
+\hline
+
+\rowcolor[RGB]{204,217,245}
+\multicolumn{1}{|c|}{\textbf{Persona description}} & \textbf{Features} \\
+\hline
+
+I read twenty books a year. & read books, twenty books a year   \\
+\hline
+
+I'm a stunt double as my second job. & stunt double, second job \\
+\hline
+
+I only eat kosher. & only eat kosher \\
+\hline
+
+I was raised in a single parent household. & single parent household \\
+\hline
+
+\rowcolor[RGB]{204,217,245}
+\multicolumn{1}{|c|}{\textbf{Utterance}} & \textbf{Features} \\
+\hline
+
+Oh wow. All i've is a dog. That's enough for me. & having a dog  \\
+\hline
+
+I am good, I just got off work and tired, I have two jobs. & got off work, two jobs, tired \\
+\hline
+
+But a good movie is always good. & good movie \\
+\hline
+
+\end{tabular}
+\caption{Examples of feature annotations used for calculating the Feature Coverage Ratio (FCR). All personas and queries in the dialogue have been annotated.}
+\label{table:fcr-feature-annotated-example}
+\end{table}
+
+\section{Main Results}
+Apart from DialoGPT, we use the context of the most recent 5 turns as dialogue history. After testing, we found that DialoGPT starts to talk nonsense when given more than 2 turns of context. Therefore, for DialoGPT, we only use the most recent 2 turns.
+
+In Table \ref{table:text-similarity}, we report experimental results on Text Similarity evaluation. Our method offers better BLEU, ROUGE, and BERTScore compared with baseline methods. Specifically, MUDI's BLEU-1, ROUGE-1, and ROUGE-L scores reach 18.19, 17.10, and 16.13, respectively, outperforming existing methods by 1.64, 3.57, and 3.45. As shown in Table \ref{table:text-diversity}, we report the Diversity evaluation. MUDI's USR is 1.0, indicating that it can generate completely unique responses under different queries and personas. Additionally, we achieved the second-highest scores in Ent-1 and Dist-1. Upon examining the outputs from PLATO, we found that they often generate shorter sentences, such as 'me to!!'. Shorter sentences tend to inflate certain metrics, like Dist-1, because they typically involve less repetition of words within a single response, leading to high distinct scores. This suggests that while our method ranks second, it could provide more substantial and contextually rich responses compared to PLATO. Furthermore, our approach achieves the highest scores among all Persona-based dialogue generation methods and significantly surpasses other baselines in Dist-1, outperforming them by 7.95. This performance establishes our method could generate varied and engaging responses.
+
+In addition, Table \ref{table:coherence} presents the results of the Coherence evaluation. Compared to other persona-based methods, MUDI has made significant progress in QuantiDCE, DEAM, and BARTScore, particularly in assessing the coherence between the query and response (left-side scores). This indicates that our approach indeed enables the model to generate responses with enhanced local coherence. Furthermore, MUDI also achieves excellent results in global coherence, which evaluates the coherence between the entire dialogue context and the response (right-side scores).
+
+Finally, Table \ref{table:personalization} presents the results of evaluating Personalization and Feature Coverage. PAA significantly outperforms other methods in scores for Personalization and FCR$_p$. Upon further examination, we discovered that this is because PAA frequently generates sentences that are exact restatements of the persona description, often ignoring the relevance to the query. As a result, its high scores in Personalization can be attributed to this tendency. Excluding the special case of PAA, MUDI achieves excellent results in Personalization compared to other methods. Combined with the previously discussed results from the Coherence evaluation (Table \ref{table:personalization}), this demonstrates that our approach successfully balances discourse relations and persona. It generates responses that effectively consider both aspects simultaneously. Furthermore, our model achieves comparable scores in the Coherence evaluation compared to DialoGPT, which focuses on general dialogue generation.
+
+In evaluating powerful LLMs like GPT-4, we find that they excel at generating lengthy responses and maintaining coherence between questions and dialogue context. Consequently, GPT-4 stands out in Coherence evaluation, scores highly in Ent-1, and performs well in FCR$_q$. However, this also results in a lower overlap with the ground-truth responses, leading to lower Text Similarity scores. Moreover, the longer sentences generated lead to a lower Dist-1 score. Another observation is that GPT-4 performs well in tasks related to Personalization, which confirms the robust capabilities of large-parameter LLMs. Additionally, when we provide LLMs with information on coherence relations, there is an observed improvement in FCR evaluations. This suggests that appropriate response type guidance can focus the LLM more on the important aspects of the questions, thus making it easier for the model to generate sentences that are relevant to the persona. However, previous research \cite{deshpande-etal-2023-toxicity} suggests that using LLMs for personalized dialogue generation can encounter biases in the generated content, which still requires careful consideration.
+
+In summary, compared to existing methods, our approach MUDI not only significantly improves performance in Text Similarity scores but also excels at integrating discourse relations and persona information. This enables us to generate personalized responses that are not only rich in content and diverse but also encompass these aspects. Moreover, in Coherence evaluations, our method achieves scores comparable to those of state-of-the-art models specialized in open-domain dialogue generation.
+
+% ----------------------------------------------
+% Table 1: Text Similarity
+% ----------------------------------------------
+
+\begin{table}[H]
+\centering
+\def\arraystretch{1.3}%
+\begin{tabular}{|c|c|c|c|c|c|c|}
+\hline
+\multicolumn{2}{|c|}{\multirow{2}{*}{\textbf{Model}}}  & \multicolumn{5}{c|}{\textbf{Text Similarity}} \\
+\cline{3-7}
+
+\multicolumn{2}{|c|}{} & BLEU-1 $\uparrow$ & BLEU-2 $\uparrow$ & ROUGE-1 $\uparrow$ & ROUGE-L $\uparrow$ & BERTScore $\uparrow$ \\
+\hhline{|=======|}
+
+\rowcolor[RGB]{242,164,100}
+\multicolumn{7}{|c|}{\textbf{Large Language Model (Prompting)}} \\
+\hhline{|=======|}
+
+\multicolumn{2}{|c|}{\textbf{GPT-4}} &7.47 &2.40 &13.52 &11.06 &84.05 \\ 
+\hhline{|=======|}
+
+\rowcolor{yellow}
+\multicolumn{7}{|c|}{\textbf{General Dialogue Generation}} \\
+\hhline{|=======|}
+
+\multicolumn{2}{|c|}{\textbf{DialoGPT}} &7.34	&1.54 &9.46 &8.41 &83.31 \\ 
+\hline
+
+\multirow{2}{*}{\textbf{PLATO}} & w/ persona &4.35	&1.01 &4.88 &4.80 &82.77 \\ 
+\cline{2-7}
+
+\multirow{2}{*}{\textbf{}} & w/o persona  &6.82 &1.86 &4.99 &4.77 &81.44 \\ 
+\hhline{|=======|}
+
+\rowcolor[RGB]{204,217,245}
+\multicolumn{7}{|c|}{\textbf{Persona-based Dialogue Generation}} \\
+\hhline{|=======|}
+
+\multicolumn{2}{|c|}{\textbf{BoB}} &15.30 &5.39 &13.21 &12.48 &83.77 \\ 
+\hline
+
+% \multicolumn{2}{|c|}{\textbf{P$^{2}$BOT}} &- &- &- &- &- \\ 
+% \hline
+
+\multicolumn{2}{|c|}{\textbf{LMEDR}}		&15.47	&5.83	&13.28	&12.26	&85.00 \\ 
+\hline
+
+\multicolumn{2}{|c|}{\textbf{PAA}}          &\underline{16.55}    &6.28    &13.53 
+&12.68    &84.42   \\
+\hline
+
+\multirow{3}{*}{\textbf{\begin{tabular}{@{}c@{}}MUDI \\ (ours)\end{tabular}}} &SP\textsubscript{$\tau=0.2$}	&15.14	&6.43	&14.87	&13.87	&85.07	\\
+\cline{2-7}
+
+\multirow{3}{*}{} &Emb\textsubscript{$\tau=0.2$}   &\underline{16.55}    &\underline{7.34}	&\textbf{\textcolor{red}{17.10}}	&\textbf{\textcolor{red}{16.13}}	&\underline{85.42}	\\
+\cline{2-7}
+
+\multirow{3}{*}{} &SP+Emb\textsubscript{$\tau=0.2$}   &\textbf{\textcolor{red}{18.19}} &\textbf{\textcolor{red}{7.77}}	&\underline{16.59}	&\underline{15.46}	&\textbf{\textcolor{red}{85.53}} \\
+\hline
+\end{tabular}
+\caption{Automatic evaluation results on ConvAI2 dataset over our implemented approach. The best results in each column are in bold, while the second is underlined.}
+\label{table:text-similarity}
+\end{table}
+
+% ----------------------------------------------
+% Table 2: Diversity
+% ----------------------------------------------
+
+\begin{table}[H]
+\centering
+\def\arraystretch{1.3}%
+\begin{tabular}{|c|c|c|c|c|}
+\hline
+\multicolumn{2}{|c|}{\multirow{2}{*}{\textbf{Model}}}  &\multicolumn{3}{c|}{\textbf{Diversity}}\\
+\cline{3-5}
+
+\multicolumn{2}{|c|}{} &Ent-1 $\uparrow$ &Dist-1 $\uparrow$ &USR $\uparrow$ \\
+\hhline{|=====|}
+
+\rowcolor[RGB]{242,164,100}
+\multicolumn{5}{|c|}{\textbf{Large Language Model (Prompting)}} \\
+\hhline{|=====|}
+
+\multicolumn{2}{|c|}{\textbf{GPT-4}} &9.40 &16.09 &1.00 \\ 
+\hhline{|=====|}
+
+\rowcolor{yellow}
+\multicolumn{5}{|c|}{\textbf{General Dialogue Generation}} \\
+\hhline{|=====|}
+
+\multicolumn{2}{|c|}{\textbf{DialoGPT}} &\textbf{\textcolor{red}{9.05}} &36.84 &\underline{0.99} \\ 
+\hline
+
+\multirow{2}{*}{\textbf{PLATO}} & w/ persona &4.67 &\textbf{\textcolor{red}{58.18}} &0.61 \\ 
+\cline{2-5}
+
+\multirow{2}{*}{\textbf{}} & w/o persona &6.73 &43.34 &0.85 \\ 
+\hhline{|=====|}
+
+\rowcolor[RGB]{204,217,245}
+\multicolumn{5}{|c|}{\textbf{Persona-based Dialogue Generation}} \\
+\hhline{|=====|}
+
+
+\multicolumn{2}{|c|}{\textbf{BoB}} &7.89 &41.75 &\underline{0.99} \\ 
+\hline
+
+% \multicolumn{2}{|c|}{\textbf{P$^{2}$BOT}} &- &- &- \\ 
+% \hline
+
+\multicolumn{2}{|c|}{\textbf{LMEDR}}  &7.14	&43.08	&0.94\\ 
+\hline
+
+\multicolumn{2}{|c|}{\textbf{PAA}}    &6.66	&40.27  &0.87 \\
+\hline
+
+\multirow{3}{*}{\textbf{\begin{tabular}{@{}c@{}}MUDI \\ (ours)\end{tabular}}} &SP\textsubscript{$\tau=0.2$}	&\underline{8.13}		&46.76	&\textbf{\textcolor{red}{1.00}}\\
+\cline{2-5}
+
+\multirow{3}{*}{} &Emb\textsubscript{$\tau=0.2$}   &7.65	&\underline{51.03}	&\textbf{\textcolor{red}{1.00}}\\
+\cline{2-5}
+
+\multirow{3}{*}{} &SP+Emb\textsubscript{$\tau=0.2$} 	&7.66	&47.68  &\textbf{\textcolor{red}{1.00}}\\
+\hline
+\end{tabular}
+\caption{Automatic evaluation results for diversity tested on ConvAI2 dataset over our implemented approach. The best results in each column are in bold, while the second is underlined.}
+\label{table:text-diversity}
+\end{table}
+
+% ----------------------------------------------
+% Table 3: Coherence 
+% ----------------------------------------------
+
+\begin{table}[H]
+\centering
+\def\arraystretch{1.3}%
+\begin{tabular}{|c|c|c|c|c|}
+\hline
+\multicolumn{2}{|c|}{\multirow{2}{*}{\textbf{Model}}}  & \multicolumn{3}{c|}{\textbf{Coherence}} \\
+\cline{3-5}
+
+\multicolumn{2}{|c|}{} & QuantiDCE $\uparrow$ & DEAM $\uparrow$ & BARTScore$_{q \rightarrow r, c \rightarrow r}$ $\downarrow$ \\
+\hline
+
+\multicolumn{2}{|c|}{\textbf{GOLD}}          &3.19 / 2.83    &0.64 / 0.85    &5.74 / 5.70   \\
+\hhline{|=====|}
+
+\rowcolor[RGB]{242,164,100}
+\multicolumn{5}{|c|}{\textbf{Large Language Model (Prompting)}} \\
+\hhline{|=====|}
+
+\multirow{2}{*}{\textbf{GPT-4}} & w/ coherence relations  &3.40 / 2.91 &0.77 / 0.95 &4.27 / 3.74 \\ 
+\cline{2-5}
+\multirow{2}{*}{\textbf{}} & w/o coherence relations  &3.41 / 2.92 &0.87 / 0.96 &4.24 / 3.73 \\ 
+
+\hhline{|=====|}
+
+\rowcolor{yellow}
+\multicolumn{5}{|c|}{\textbf{General Dialogue Generation}} \\
+\hhline{|=====|}
+
+\multicolumn{2}{|c|}{\textbf{DialoGPT}} &\textbf{\textcolor{red}{3.23}} / 2.79 &\textbf{\textcolor{red}{0.70}} / \textbf{\textcolor{red}{0.88}} &5.12 / 5.19 \\ 
+\hline
+
+% \multirow{2}{*}{\textbf{PLATO}} & w/ persona &3.32 / 3.43	&0.22 / 0.75 &6.42 / 6.63 \\ 
+\multirow{2}{*}{\textbf{PLATO}} & w/ persona &1.68 / 1.57	&0.22 / 0.75 &6.42 / 6.63 \\ 
+\cline{2-5}
+
+\multirow{2}{*}{\textbf{}} & w/o persona  &1.87 / 1.77 &0.25 / 0.74 &5.83 / 5.80 \\ 
+\hhline{|=====|}
+
+\rowcolor[RGB]{204,217,245}
+\multicolumn{5}{|c|}{\textbf{Persona-based Dialogue Generation}} \\
+\hhline{|=====|}
+
+\multicolumn{2}{|c|}{\textbf{BoB}} &2.99 / 2.76 &0.39 / 0.86 &5.82 / 5.92 \\ 
+\hline
+
+% \multicolumn{2}{|c|}{\textbf{P$^{2}$BOT}} &- &- &- \\ 
+% \hline
+
+\multicolumn{2}{|c|}{\textbf{LMEDR}}		&2.89 / 2.90	&0.43 / 0.78	&5.32 / 4.99  \\ 
+\hline
+
+\multicolumn{2}{|c|}{\textbf{PAA}}           &2.70 / \underline{2.93}    &0.56 / 0.83    &5.17 / \underline{4.62}   \\
+\hline
+
+\multirow{3}{*}{\textbf{\begin{tabular}{@{}c@{}}MUDI \\ (ours)\end{tabular}}} &SP\textsubscript{$\tau=0.2$}	&3.05 / 2.84	&0.63 / 0.85	&\underline{4.67} / \textbf{\textcolor{red}{4.61}}	\\
+\cline{2-5}
+
+\multirow{3}{*}{} &Emb\textsubscript{$\tau=0.2$}   &\textbf{\textcolor{red}{3.23}} / \textbf{\textcolor{red}{2.94}}    &0.56 / 0.82	&4.80 / 4.83 \\
+\cline{2-5}
+
+\multirow{3}{*}{} &SP+Emb\textsubscript{$\tau=0.2$}   &\underline{3.21} / 2.92	&\underline{0.64} / \underline{0.86}	&\textbf{\textcolor{red}{4.66}} / 4.66	\\
+\hline
+\end{tabular}
+\caption{Automatic evaluation results for coherence tested on the ConvAI2 dataset. The best results in each column are in bold, while the second-best results are underlined. The score on the left considers only the local coherence between the query and the response, while the score on the right takes into account the global coherence between the entire dialogue and the response.}
+\label{table:coherence}
+\end{table}
+
+% ----------------------------------------------
+% Table 4: Personalization & Feature Coverage
+% ----------------------------------------------
+
+\begin{table}[H]
+\centering
+\def\arraystretch{1.3}%
+\begin{tabular}{|c|c|c|c|c|c|}
+\hline
+\multicolumn{2}{|c|}{\multirow{2}{*}{\textbf{Model}}}  &\multicolumn{2}{c|}{\textbf{Personalization}} &\multicolumn{2}{c|}{\textbf{Feature Coverage}}\\
+\cline{3-6}
+
+\multicolumn{2}{|c|}{} &C.Score $\uparrow$ &BARTScore$_{p \leftrightarrow r}$ $\downarrow$ &FCR$_{q}$ $\uparrow$ &FCR$_{p}$ $\uparrow$ \\
+\hline
+
+\multicolumn{2}{|c|}{\textbf{GOLD}}      &4.10   &5.68 &7.69 &4.52 \\
+\hhline{|======|}
+
+\rowcolor[RGB]{242,164,100}
+\multicolumn{6}{|c|}{\textbf{Large Language Model (Prompting)}} \\
+\hhline{|======|}
+
+\multirow{2}{*}{\textbf{GPT-4}} & w/ coherence relations  &29.47 &4.33 &21.62 &27.12 \\ 
+\cline{2-6}
+\multirow{2}{*}{\textbf{}} & w/o coherence relations  &28.90 &4.07 &9.77 &5.72 \\ 
+\hhline{|======|}
+
+\rowcolor{yellow}
+\multicolumn{6}{|c|}{\textbf{General Dialogue Generation}} \\
+\hhline{|======|}
+
+\multicolumn{2}{|c|}{\textbf{DialoGPT}} &4.53 &5.39 &\textbf{\textcolor{red}{6.78}} &4.45  \\ 
+\hline
+
+\multirow{2}{*}{\textbf{PLATO}} & w/ persona &0.56 &6.06 &1.20 &0.92 \\ 
+\cline{2-6}
+
+\multirow{2}{*}{\textbf{}} & w/o persona  &0.18 &5.83 &3.23 &0.28 \\ 
+\hhline{|======|}
+
+\rowcolor[RGB]{204,217,245}
+\multicolumn{6}{|c|}{\textbf{Persona-based Dialogue Generation}} \\
+\hhline{|======|}
+
+\multicolumn{2}{|c|}{\textbf{BoB}} &0.51 &5.52 &3.68 &0.42  \\ 
+\hline
+
+% \multicolumn{2}{|c|}{\textbf{P$^{2}$BOT}} &- &- &- &-  \\ 
+% \hline
+
+\multicolumn{2}{|c|}{\textbf{LMEDR}}		&7.38	&5.27 &4.63	 &6.99 \\ 
+\hline
+
+
+\multicolumn{2}{|c|}{\textbf{PAA}}       &\textbf{\textcolor{red}{15.19}}   &\textbf{\textcolor{red}{4.26}} &\underline{4.66}    &\textbf{\textcolor{red}{13.84}} \\
+\hline
+
+\multirow{3}{*}{\textbf{\begin{tabular}{@{}c@{}}MUDI \\ (ours)\end{tabular}}} &SP\textsubscript{$\tau=0.2$}	&\underline{11.87} &\underline{4.53} &\underline{4.66} &6.50	\\
+\cline{2-6}
+
+\multirow{3}{*}{} &Emb\textsubscript{$\tau=0.2$}   &9.70	&4.75 &4.36 &\underline{7.77} \\
+\cline{2-6}
+
+\multirow{3}{*}{} &SP+Emb\textsubscript{$\tau=0.2$}  &9.75	&4.76 &4.05 &5.01 \\
+\hline
+\end{tabular}
+\caption{Automatic evaluation results for personalization and feature coverage tested on the  ConvAI2 dataset. The best results in each column are in bold, while the second-best results are underlined.}
+\label{table:personalization}
+\end{table}
+
+% ----------------------------------------------
+% Section: Analysis
+% ----------------------------------------------
+
+\section{Analysis}
+
+\subsection{The Effect of Proposed DialogueGAT}
+To validate the performance of the proposed DialogueGAT compared with existing GNN methods in Dialogue Graph modeling, we analyze results in the Next Response Type Prediction (NRTP) and Coherence Relations Classification tasks on the validation set. We compare DialogueGAT with GATv2. This comparison is illustrated in Figure \ref{fig:compare_gatv2_dialoguegat}. The experimental results demonstrate that DialogueGAT consistently outperforms GATv2 across all tasks in terms of Hits@5 scores, highlighting its enhanced capability to predict discourse relations (response types) from dialogue context information. Notably, in the Coherence Relations Classification (RC) task, DialogueGAT achieves significant improvements, showcasing its robustness in understanding context relationships. Additionally, the loss metrics further validate the efficiency of DialogueGAT; it registers lower loss values than GATv2 in both NRTP tasks, indicating superior model optimization and better fitting. The most pronounced difference is observed in the RC task, where the loss for DialogueGAT is markedly lower, emphasizing its exceptional performance in accurately classifying coherence relations. These findings suggest that DialogueGAT enhances prediction accuracy and effectively reduces error rates in discourse understanding.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\textwidth]{./context/experiment/images/compare_gatv2_dialoguegat.png}
+    \caption{Comparison of GATv2 and DialogueGAT (our proposed) as Dialogue Graph Encoders in Different Tasks. \textit{NRTP} denotes Next Response Type Prediction; \textit{RC} denotes Relations Classification.}
+    \label{fig:compare_gatv2_dialoguegat}
+\end{figure}
+
+\subsection{The Effect of Dialogue Graph Encoder}
+We analyze the effectiveness of the Dialogue Graph Encoder (discussed in Section 3.2.2 fine-tuning phase) under various settings. (1) \textbf{Context+Persona (Attention)}: This is our primary method where we utilize an Attention-based Feature Fusion approach to integrate representations from both the Dialogue Graph and the Persona Graph. (2) \textbf{Context+Persona (Add)}: We replace the Attention-based Feature Fusion approach with a simple addition of the persona and context representations. (3) \textbf{Context}: In this setting, we solely rely on the representation from the Dialogue Graph. (4) \textbf{Persona}: Here, we use only the representation from the Persona Graph. (5) \textbf{Random}: A random vector replaces the output of the Dialogue Graph Encoder. (6) \textbf{None}: The Dialogue Graph Encoder is completely removed from the process, allowing the generator to receive only the context and persona information from the Text Encoder. The comprehensive experimental results can be found in Figure \ref{fig:effectiveness_of_dialogue_graph_encoder}. We report the metrics for BLEU-1, ROUGE-1, and Consistency Score (C.Score).
+
+Our experimental results demonstrate that the attention-based feature fusion approach (Context+Persona (Attention)) significantly outperforms other methods in terms of BLEU-1 and ROUGE-1 scores. These findings confirm that effectively integrating contextual and persona information through an attention mechanism enhances the similarity of the generated responses to the ground-truth responses. In contrast, simpler methods such as addition (Context+Persona (Add)) or those relying solely on context or persona information exhibit lower performance. The scores drastically decrease when random vectors are employed or when the dialogue graph encoder is omitted entirely, which emphasizes the crucial role of structured and meaningful input in producing coherent responses. The consistency scores further elucidate the models' ability to generate responses that align with persona traits. The superior performance of the attention-based method suggests its effectiveness in maintaining persona consistency within the responses. Notably, employing random vectors results in negative C.Score values, indicating that some generated responses are not only irrelevant but also contradictory to the defined personas.
+
+These outcomes reinforce the importance of utilizing attention-based feature fusion in dialogue systems, especially in tasks that require a nuanced understanding of both context and persona. Additionally, the inferior results associated with random inputs and the complete removal of the dialogue graph encoder highlight potential risks of response incoherence and contradiction when inputs are not integrated thoughtfully. We present examples of generated results for these settings in Table \ref{table:case_study_effectiveness_of_dialogue_graph_encoder}.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\textwidth]{./context/experiment/images/effectiveness_of_dialogue_graph_encoder.png}
+    \caption{Performance analysis of Dialogue Graph Encoder across different settings. Here, "C" represents Context, and "P" represents Persona.}
+    \label{fig:effectiveness_of_dialogue_graph_encoder}
+\end{figure}
+
+\subsection{The Effect of Tau Values in Dynamic Weighted Aggregation}
+We analyze the effectiveness of $\tau$ in Dynamic Weighted Aggregation (discussed in Section 3.4). According to our results, shown in Figure \ref{fig:effectiveness_of_tau}, each score gradually decreases as $\tau$ increases, with the most significant drop occurring at 0.8. The metrics most noticeably affected are DEAM and C.Score, which assess coherence and personalization, respectively. Additionally, we observed that the scores, particularly for BLEU-1, actually increase when $\tau$ reaches 1.0. We hypothesize that this is due to our approach, which involves a residual connection (Eq. \ref{eq:dynamic_weighted_aggregation_output}) between the outputs of the Text Encoder and the Dialogue Graph Encoder with the results of the dynamic weighting. When $\tau$ is set to 1.0, it effectively considers only the original outputs, thus retaining a certain level of generative capability. However, this does not enhance persona-consistency and coherence as much as when $\tau$ is optimally adjusted. 
+
+In summary, by employing Dynamic Weighted Aggregation and selecting an appropriate 
+$\tau$ value, we can effectively balance coherence and personalization information, thereby generating more natural responses. This method ensures that the model not only adheres to the user-specific attributes but also maintains a logical and coherent dialogue flow, crucial for enhancing user engagement and satisfaction in interactive systems.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{./context/experiment/images/effectiveness_of_tau.png}
+    \caption{Performance analysis of $\tau$ in Dynamic Weighted Aggregation.}
+    \label{fig:effectiveness_of_tau}
+\end{figure}
+
+\subsection{Ablation Study}
+% In our approach, to enable the dialogue graph encoder to understand the dialogue structure and adapt to subsequent coherence-related fine-tuning tasks, we designed several pre-training tasks aimed at capturing the dialogue structure. Therefore, we conducted an ablation study on these tasks to examine their impact on generating personalized responses later on. We present the results for three important metrics, coherence, personalization, and diversity, to demonstrate the impact of the pre-training task on the generated outcomes. The results of the ablation study for pre-training tasks are displayed in Table \ref{table:ablation_study}, we observed that first, after removing the Shortest Path Prediction task, the scores for coherence (QuantiDCE), persona-consistency (C.Score), and diversity (Dist-1) began to drop sharply. The goal of the Turn Classification task is to help the model capture the local structure. When this task was removed, there was a dramatic decline in scores for local coherence and persona-consistency, proving that this task aids the model in effectively capturing semantic similarities in dialogue data. Furthermore, if the Graph Reconstruction task is removed, there is a continuing downward trend in personalization scores. This confirms that our three self-supervised pretraining tasks are beneficial for the model’s understanding of dialogue structure and assist in coherence-related fine-tuning tasks, ultimately impacting the model's ability to balance coherence and persona information when generating personalized responses.
+
+% Additionally, we conducted ablation experiments for different fine-tuning tasks. According to the conclusions drawn from Table \ref{table:ablation_study}, the removal of specific fine-tuning tasks significantly affects the model's performance metrics. Notably, the absence of tasks such as Coherence Relations Classification and Next Response Type Prediction leads to incomplete data in the table, indicating these tasks' critical roles in enhancing model accuracy and output quality. Furthermore, the removal of the Link Prediction task results in noticeable drops in both local coherence and persona consistency scores, underscoring its importance in maintaining the structural integrity and relevance of generated dialogues. These findings highlight the substantial impact that fine-tuning adjustments have on the effectiveness of the model in personalized dialogue generation.
+
+% In our study, we investigated the impact of specific pre-training and fine-tuning tasks on the performance of a dialogue graph encoder, designed to grasp the structure of dialogues and adapt to coherence-related fine-tuning tasks. Our ablation study, summarized in Table \ref{table:ablation_study}, revealed significant declines in key performance metrics—coherence (QuantiDCE), persona-consistency (C.Score), and diversity (Dist-1)—upon the removal of these tasks. The removal of the Shortest Path Prediction (SPP) task led to sharp decreases across all metrics, underscoring its role in enhancing the encoder's capability to maintain dialogue coherence and persona consistency. Similarly, eliminating the Turn Classification (TC) task resulted in a substantial drop in local coherence and persona-consistency scores, indicating its effectiveness in capturing semantic similarities within dialogue data. Additionally, when the Graph Reconstruction (GR) task was excluded, we observed a continued decline in personalization scores, suggesting its importance in retaining a nuanced understanding of dialogue structures. Our findings were further corroborated during the fine-tuning phase, where the absence of specific tasks like Coherence Relations Classification (RC), Next Response Type Prediction (NRTP), and Link Prediction (LP) also significantly impacted model performance, particularly affecting its ability to balance coherence and personalization in generating responses. These results collectively demonstrate that both pre-training and fine-tuning tasks are crucial for optimizing the dialogue graph encoder's performance in personalized dialogue generation.
+
+In our approach, we propose the Dialogue Graph Encoder that utilizes a two-stage training method of pretrain-finetune to allow the model to first learn dialogue structure and then further capture latent coherence relationships in dialogue data during the fine-tuning phase. To examine the impact of these diverse tasks on generating personalized responses, we conducted ablation experiments to evaluate the specific effects of removing certain pretraining and fine-tuning tasks on model performance. Experimental results summarized in Table \ref{table:ablation_study} show that when removing pre-training tasks such as Shortest Path Prediction (SPP), Turn Classification (TC), or Graph Reconstruction (GR), the model significantly decreases in key indicators like semantic consistency, persona-consistency, and diversity. Particularly, the objective of the Turn Classification (TC) task is to enable the model to predict the sequential relationship between two utterances in a dialogue, thereby learning effective utterance node representations. This aids the model's transferability to subsequent fine-tuning tasks. Hence, the removal of this task results in the largest decline in performance scores, as the model loses its capability to effectively identify local dialogue structures. These results confirm the crucial role of these pretraining tasks in helping models understand and adapt to dialogue structures, and also establish a solid foundation for subsequent supervised fine-tuning. Furthermore, ablation studies during the fine-tuning phase further emphasize the importance of tasks such as Coherence Relations Classification (RC), Next Response Type Prediction (NRTP), and Link Prediction (LP) in enhancing model performance for personalized dialogue generation. Particularly, the removal of the Coherence Relations Classification (RC) task resulted in a dramatic decrease in the model's performance in personalization assessments. This demonstrates that supervised edge-level relationship prediction tasks can aid the model in capturing potential discourse relations between adjacent nodes, learning node representations that encapsulate this information, and during subsequent Attention-based Feature Fusion, more effectively integrating utterance and persona node information for enhanced coherence and persona-consistency.
+
+\begin{table}[ht]
+    \centering
+    \def\arraystretch{1.4}%
+    \begin{tabular}{cccc}
+    \hline
+           Models & QuantiDCE & C.Score & Dist-1 \\
+          \hline
+          \begin{tabular}{@{}c@{}}$\textbf{MUDI}_{\text{SP}}$ \\ (ours)\end{tabular}  & 3.05 & 11.87 & 46.76 \\
+          \hhline{====}
+        \multicolumn{4}{c}{\textbf{Pre-training}} \\
+        \hhline{====}
+          \hspace*{0.65cm} w/o SPP & 2.72  & 7.05 & 34.07  \\
+         \hspace*{0.5cm} w/o TC  & 2.69  & 1.18 & 33.07 \\
+         \hspace*{0.5cm} w/o GR & 2.72  & 6.49 & 33.94 \\
+        \hhline{====}
+        \multicolumn{4}{c}{\textbf{Fine-tuning}} \\
+        \hhline{====}
+        \hspace*{0.5cm} w/o RC & 2.77  & 0.54 & 31.91  \\
+         \hspace*{1.0cm} w/o NRTP  & 2.95  & 2.83 & 31.15 \\
+         \hspace*{0.5cm} w/o LP & 2.69  & 6.22 & 34.04 \\
+    \hline
+    \end{tabular}
+    \caption{Ablation study of the Dialogue Graph Encoder for pre-training and fine-tuning tasks.}
+    \label{table:ablation_study}
+\end{table}
+
+
+\begin{table}[H]
+\centering
+\def\arraystretch{1.0}%
+\begin{tabular}{|p{3.5cm}|p{12cm}|}
+
+\hline
+\rowcolor{yellow}
+\multicolumn{2}{|c|}{\textbf{Persona}} \\
+\hline
+\multicolumn{2}{|l|}{I have two dogs.} \\
+\multicolumn{2}{|l|}{I like to work on vintage cars.} \\
+\multicolumn{2}{|l|}{My favorite music is country.} \\
+\multicolumn{2}{|l|}{I own two vintage mustangs.} \\
+\hline
+
+\rowcolor{yellow}
+\multicolumn{2}{|c|}{\textbf{Context}} \\
+\hline
+\multicolumn{2}{|l|}{Q: Hi! How are you doing tonight?} \\
+\multicolumn{2}{|l|}{R: I'm doing great. Just relaxing with my two dogs.} \\
+\multicolumn{2}{|l|}{Q: Great. In my spare time I do volunteer work.} \\
+\multicolumn{2}{|l|}{R: That's neat. What kind of volunteer work do you do?} \\
+\multicolumn{2}{|l|}{Q: I work in a homeless shelter in my town.} \\
+\multicolumn{2}{|l|}{R: Good for you. Do you like vintage cars? I've two older mustangs.} \\
+\multicolumn{2}{|l|}{Q: Cool. Not really into cars. My day job is wrestling.} \\
+\multicolumn{2}{|l|}{R: Cars are my thing. Vintage cars. I love working on them. Wrestling? Do you enjoy it?} \\
+\multicolumn{2}{|l|}{Q: Yes, I love the crowds, getting to know people.} \\
+\multicolumn{2}{|l|}{R: I didn't think about the crowd aspect of wrestling. I do not like crowds.} \\
+\multicolumn{2}{|l|}{Q: Understood. When I need to be alone, I work out a few times each week.} \\
+\multicolumn{2}{|l|}{R: I agree. Working out is a great way to burn off steam. Do you like country music?} \\
+\hline
+
+\rowcolor{yellow}
+\multicolumn{2}{|c|}{\textbf{Query}} \\
+\hline
+\multicolumn{2}{|l|}{A little bit. I can get into taylor swift.} \\
+
+\hhline{|==|}
+\rowcolor[RGB]{204,217,245}
+\multicolumn{2}{|c|}{\textbf{Response}} \\
+\hhline{|==|}
+\textbf{Context+Persona (Attention)} & I do not like her. She's a bit too uptight for my taste. But I like her music. \\
+\textbf{Context+Persona (Add)} & I can get may may and m and may and j on for more of her \\
+\textbf{Context} &  What was she like? \\
+\textbf{Persona} & I like country music too. \\
+\textbf{Random} & you The A’ A A played The old White lead A Barbara at The The 17… \\
+\textbf{None} & I like country music as well. \\
+
+\hline
+\end{tabular}
+\caption{Case analysis of the effectiveness of Dialogue Graph Encoder.}
+\label{table:case_study_effectiveness_of_dialogue_graph_encoder}
+\end{table}
+
+\subsection{Case Study}
+Teable \ref{table:case_study_1}, \ref{table:case_study_2}, \ref{table:case_study_3}, and \ref{table:case_study_4} present the personalized responses generated by various methods using the ConvAI2 dataset. The responses generated by the proposed method, \textbf{MUDI}, demonstrated greater consistency with their respective personas and showed higher coherence with both the context and the query, appearing more human-like. As illustrated in Table \ref{table:case_study_1}, the responses from BoB were incoherent with the query, though they remained consistent with the persona. PAA often overfocused on the persona, leading to repetitive narratives of the persona description. Both LMEDR and our model produced responses that were more coherent, basing them on the user persona, but MUDI was able to generate more detailed replies, such as adding personal aspirations to the basic response about family support. 
+
+In Table \ref{table:case_study_2}, the responses generated by BoB were irrelevant to the personas and incoherent with the context. PAA exhibited a global incoherence from the dialogue context, failing to maintain a logical flow in the conversation. While LMEDR generated a somewhat relevant response indicating a dream car, it lacked depth and personal context. On the other hand, MUDI produced a more personalized and contextually rich response that not only mentions the dream car but also integrates family dynamics, demonstrating a deeper understanding of the persona's background and the complexities in their personal relationships. 
+
+In Table \ref{table:case_study_3}, BoB and PAA tended to overlook content from the ongoing dialogue, generating repetitive responses that rendered the entire conversation incoherent. Although LMEDR was able to generate adequate responses, our model excelled by producing more natural responses through the inclusion of responsive questions. 
+
+As shown in Table \ref{table:case_study_4}, BoB diverged from the persona's preference by mentioning classic rock instead of country music, showing a misalignment with the user’s interests. LMEDR and PAA both correctly identified and responded with a generic appreciation for country music, aligning with the persona’s interests, yet their responses lacked specific engagement with the user’s mention of Taylor Swift or deeper personal nuances. MUDI's response, while initially not favoring Taylor Swift, cleverly circled back to acknowledge her music, demonstrating not only a nuanced understanding of the persona's tastes but also adding an interesting twist to the conversation. This illustrates MUDI's ability to generate engaging and lifelike responses, making the interaction more intriguing for users.
+
+In summary, our model \textbf{MUDI} effectively combines dialogue and persona elements to generate appropriate responses. Furthermore, it excels at using responsive questions to enhance the conversation's naturalness.
+
+
+% ----------------------------------------------
+% Case Study 1
+% ----------------------------------------------
+
+\begin{table}[ht]
+\centering
+\def\arraystretch{1.6}%
+\begin{tabular}{|l|p{11cm}|}
+
+\hline
+\rowcolor{yellow}
+\multicolumn{2}{|c|}{\textbf{Persona}} \\
+\hline
+\multicolumn{2}{|l|}{My dream car is a rolls royce ghost.} \\
+\multicolumn{2}{|l|}{I currently work for a watch dealer.} \\
+\multicolumn{2}{|l|}{My family does not support my career choices.} \\
+\multicolumn{2}{|l|}{I often shop for shoes and watches.} \\
+\multicolumn{2}{|l|}{I like shopping.} \\
+\hline
+
+\rowcolor{yellow}
+\multicolumn{2}{|c|}{\textbf{Context}} \\
+\hline
+\multicolumn{2}{|l|}{Q: Good evening. What are you up to?} \\
+\multicolumn{2}{|l|}{R: Hello, how are you ? I am well. I like to shop for shoes and watches.} \\
+\multicolumn{2}{|l|}{Q: I don't shop much. Prefer to relax at home with my cow.} \\
+\multicolumn{2}{|l|}{R: What do you do ? I'm work for a watch dealer.} \\
+\hline
+
+\rowcolor{yellow}
+\multicolumn{2}{|c|}{\textbf{Query}} \\
+\hline
+\multicolumn{2}{|l|}{No wonder you like watches ! I'm a commercial electrician.} \\
+
+\hhline{|==|}
+\rowcolor[RGB]{204,217,245}
+\multicolumn{2}{|c|}{\textbf{Response}} \\
+\hhline{|==|}
+\textbf{GOLD} & wonderful! yeah, however, my family does not support my choice of career. \\
+\textbf{BoB} & I work at a dealership, but I am not very good at it. \\
+% \textbf{P$^2$BOT} & what do you do for a living ? i work for the watch. \\
+\textbf{LMEDR} & My family does not support my career choices. \\
+\textbf{PAA} & I like to shop. I also like to shop. \\
+\textbf{MUDI} & My family does not support my career choices. I want to drive a rolls royce ghost. \\
+
+\hline
+\end{tabular}
+\caption{Case analysis of personalized response generation on the ConvAI2 dataset.}
+\label{table:case_study_1}
+\end{table}
+
+% ----------------------------------------------
+% Case Study 2
+% ----------------------------------------------
+
+\begin{table}[ht]
+\centering
+\def\arraystretch{1.6}%
+\begin{tabular}{|l|p{11cm}|}
+
+\hline
+\rowcolor{yellow}
+\multicolumn{2}{|c|}{\textbf{Persona}} \\
+\hline
+\multicolumn{2}{|l|}{My dream car is a rolls royce ghost.} \\
+\multicolumn{2}{|l|}{I currently work for a watch dealer.} \\
+\multicolumn{2}{|l|}{My family does not support my career choices.} \\
+\multicolumn{2}{|l|}{I often shop for shoes and watches.} \\
+\multicolumn{2}{|l|}{I like shopping.} \\
+\hline
+
+\rowcolor{yellow}
+\multicolumn{2}{|c|}{\textbf{Context}} \\
+\hline
+\multicolumn{2}{|l|}{Q: Good evening. What are you up to?} \\
+\multicolumn{2}{|l|}{R: Hello, how are you ? I am well. I like to shop for shoes and watches.} \\
+\multicolumn{2}{|l|}{Q: I don't shop much. Prefer to relax at home with my cow.} \\
+\multicolumn{2}{|l|}{R: What do you do ? I'm work for a watch dealer.} \\
+\multicolumn{2}{|l|}{Q: No wonder you like watches! I'm a commercial electrician.} \\
+\multicolumn{2}{|l|}{R: Wonderful! Yeah, however, my family does not support my choice of career.} \\
+\hline
+
+\rowcolor{yellow}
+\multicolumn{2}{|c|}{\textbf{Query}} \\
+\hline
+\multicolumn{2}{|l|}{Why not? Family is important.} \\
+
+\hhline{|==|}
+\rowcolor[RGB]{204,217,245}
+\multicolumn{2}{|c|}{\textbf{Response}} \\
+\hhline{|==|}
+\textbf{GOLD} & I'm not sure why they do not. Do you like cars? \\
+\textbf{BoB} & I am not sure. I am a watch dealer. \\
+% \textbf{P$^2$BOT} & my family doesn't support my lifestyle choices. \\
+\textbf{LMEDR} & I do not know. I do have a dream car though. It is a rolls royce ghost. \\
+\textbf{PAA} & I am a watch dealer. I have a lot of money. \\
+\textbf{MUDI} & yes agree! I want to drive a rolls royce ghost car, but my family does not like that. \\
+
+\hline
+\end{tabular}
+\caption{Case analysis of personalized response generation on the ConvAI2 dataset.}
+\label{table:case_study_2}
+\end{table}
+
+% ----------------------------------------------
+% Case Study 3
+% ----------------------------------------------
+
+\begin{table}[ht]
+\centering
+\def\arraystretch{1.6}%
+\begin{tabular}{|l|p{11cm}|}
+
+\hline
+\rowcolor{yellow}
+\multicolumn{2}{|c|}{\textbf{Persona}} \\
+\hline
+\multicolumn{2}{|l|}{I listen to rap music.} \\
+\multicolumn{2}{|l|}{I produce music for artists.} \\
+\multicolumn{2}{|l|}{I drive a 2015 Honda Civic.} \\
+\multicolumn{2}{|l|}{My favorite food is pizza.} \\
+\hline
+
+\rowcolor{yellow}
+\multicolumn{2}{|c|}{\textbf{Context}} \\
+\hline
+\multicolumn{2}{|l|}{Q: Hi, how are you? Do you have any brothers or sisters?} \\
+\multicolumn{2}{|l|}{R: No I don't do you?} \\
+\multicolumn{2}{|l|}{Q: Yes, I'm 13 and I've an older brother.} \\
+\multicolumn{2}{|l|}{R: That's nice what kind of music do you like.} \\
+\multicolumn{2}{|l|}{Q: I do not have much time as I play soccer. You?} \\
+\multicolumn{2}{|l|}{R: I am a music producer for rap artists} \\
+\hline
+
+\rowcolor{yellow}
+\multicolumn{2}{|c|}{\textbf{Query}} \\
+\hline
+\multicolumn{2}{|l|}{Cool I like rap. I hate maths though! Do you have other hobbies?} \\
+
+\hhline{|==|}
+\rowcolor[RGB]{204,217,245}
+\multicolumn{2}{|c|}{\textbf{Response}} \\
+\hhline{|==|}
+\textbf{GOLD} & Work takes up a lot of my time. \\
+\textbf{BoB} & I like music and I like to listen to music. \\
+% \textbf{P$^2$BOT} & I like to listen to rap music. \\
+\textbf{LMEDR} & I like to drive my honda civic. \\
+\textbf{PAA} & I like rap music, I produce it for artists. \\
+\textbf{MUDI} & I like to go my old Honda Civic car and eat pizza. Do you have any hobbies? \\
+
+\hline
+\end{tabular}
+\caption{Case analysis of personalized response generation on the ConvAI2 dataset.}
+\label{table:case_study_3}
+\end{table}
+
+% ----------------------------------------------
+% Case Study 4
+% ----------------------------------------------
+
+\begin{table}[ht]
+\centering
+\def\arraystretch{1.6}%
+\begin{tabular}{|l|p{11cm}|}
+
+\hline
+\rowcolor{yellow}
+\multicolumn{2}{|c|}{\textbf{Persona}} \\
+\hline
+\multicolumn{2}{|l|}{I have two dogs.} \\
+\multicolumn{2}{|l|}{I like to work on vintage cars.} \\
+\multicolumn{2}{|l|}{My favorite music is country.} \\
+\multicolumn{2}{|l|}{I own two vintage mustangs.} \\
+\hline
+
+\rowcolor{yellow}
+\multicolumn{2}{|c|}{\textbf{Context}} \\
+\hline
+\multicolumn{2}{|l|}{Q: Hi! How are you doing tonight?} \\
+\multicolumn{2}{|l|}{R: I'm doing great. Just relaxing with my two dogs.} \\
+\multicolumn{2}{|l|}{Q: Great. In my spare time I do volunteer work.} \\
+\multicolumn{2}{|l|}{R: That's neat. What kind of volunteer work do you do?} \\
+\multicolumn{2}{|l|}{Q: I work in a homeless shelter in my town.} \\
+\multicolumn{2}{|l|}{R: Good for you. Do you like vintage cars? I've two older mustangs.} \\
+\multicolumn{2}{|l|}{Q: Cool. Not really into cars. My day job is wrestling.} \\
+\multicolumn{2}{|l|}{R: Cars are my thing. Vintage cars. I love working on them. Wrestling? Do you enjoy it?} \\
+\multicolumn{2}{|l|}{Q: Yes, I love the crowds, getting to know people.} \\
+\multicolumn{2}{|l|}{R: I didn't think about the crowd aspect of wrestling. I do not like crowds.} \\
+\multicolumn{2}{|l|}{Q: Understood. When I need to be alone, I work out a few times each week.} \\
+\multicolumn{2}{|l|}{R: I agree. Working out is a great way to burn off steam. Do you like country music?} \\
+\hline
+
+\rowcolor{yellow}
+\multicolumn{2}{|c|}{\textbf{Query}} \\
+\hline
+\multicolumn{2}{|l|}{A little bit. I can get into taylor swift.} \\
+
+\hhline{|==|}
+\rowcolor[RGB]{204,217,245}
+\multicolumn{2}{|c|}{\textbf{Response}} \\
+\hhline{|==|}
+\textbf{GOLD} & lol. She's more pop now. Her old stuff was country. I like classic country. \\
+\textbf{BoB} & I'm not much into music. I like classic rock. \\
+% \textbf{P$^2$BOT} &  \\
+\textbf{LMEDR} & Yes, I love country music. \\
+\textbf{PAA} & I do. I love to listen to country music. \\
+\textbf{MUDI} & I do not like her. She's a bit too uptight for my taste. But I like her music. \\
+
+\hline
+\end{tabular}
+\caption{Case analysis of personalized response generation on the ConvAI2 dataset.}
+\label{table:case_study_4}
+\end{table}
+
+% ------------------------------------------------
+\EndChapter
+% ------------------------------------------------

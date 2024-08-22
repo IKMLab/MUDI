@@ -1,0 +1,10 @@
+% ------------------------------------------------
+\StartChapter{Conclusion}{chapter:conclusion}
+% ------------------------------------------------
+In this work, we propose a new method, \textbf{MUDI}, to effectively model discourse relations in personalized dialogue generation. To the best of our knowledge, \textbf{MUDI} is the first framework to jointly integrate Discourse Relations and Persona in Personalized Dialogue. Firstly, we propose DialogueGAT, a dialogue-enhanced GNN, as a Dialogue Graph Encoder, designed to capture dialogue structure and contextual discourse relations. Additionally, we utilize an Attention-Based Feature Fusion method to effectively integrate context relations and persona information. We further enhance our model by employing a Text Encoder to capture persona-aware dialogue representations. We increase the decoder's ability to consider coherent information while predicting the next token by leveraging both a prompt-based conditional dialogue generation mechanism, which uses prompts to guide the response generation process, and our coherence-aware attention mechanism, which incorporates learnable embeddings and token representations. Finally, we leverage Dynamic Weighting Aggregation to balance the information between coherence-aware and persona-aware dialogue representations, ensuring a robust integration of both elements.
+
+Extensive experiments and analyses demonstrate that our method, \textbf{MUDI}, significantly improves the quality of personalized responses by making them more coherent, informative, and aligned with the user's persona traits, as well as more human-like.
+
+% ------------------------------------------------
+\EndChapter
+% ------------------------------------------------

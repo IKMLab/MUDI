@@ -1,0 +1,15 @@
+**/Thumbs.db
+**/*.aux
+**/*.blg
+**/*.lof
+**/*.log
+**/*.lot
+**/*.out
+reference/*.pdf
+thesis/*.pdf
+**/*.bbl
+**/*.synctex.gz*
+**/*.toc
+**/*.DS_Store*
+**/*~
+*.synctex(busy)
