@@ -17,33 +17,34 @@ sys.path.append('.')
 
 from trainer import get_trainer_class
 
-from base.base_dataset import BaseGraphDataset
-from data.collator import PersonalizedDialogueGenerationDataCollator
-from data.dataset import (
+from src.base.base_dataset import BaseGraphDataset
+from src.data.collator import PersonalizedDialogueGenerationDataCollator
+from src.data.dataset import (
     ConvAI2ForDialogueGraphEncodingDataset,
     ConvAI2ForPersonalizedDialogueGenerationDataset,
 )
-from data.processor import ConvAI2DataProcessor, DialogueGraphDataProcessMode
-from models.modeling_generator import PersonalizedDialogueGenerator
-from utils.args_utils import parse_generator_args
-from utils.constants import (
+from src.data.processor import (
+    ConvAI2DataProcessor,
+    DialogueGraphDataProcessMode,
+)
+from src.models.modeling_generator import PersonalizedDialogueGenerator
+from src.utils.args_utils import parse_generator_args
+from src.utils.constants import (
     NEW_SPEICAL_TOKENS,
     NEW_SPEICAL_TOKENS_MAP,
     ModelTrainMode,
 )
-from utils.data_utils import (
+from src.utils.data_utils import (
     convert_to_dict,
     find_and_load_model,
     load_pickle,
     save_yaml,
 )
-
-# from utils.mllt.datasets.loader import ClassAwareSampler
-from utils.model_configs import (
+from src.utils.model_configs import (
     ModelArguments,
     TrainingConfigs,
 )
-from utils.utils import (
+from src.utils.utils import (
     create_logger,
     create_run_dir,
     initialize_wandb,
@@ -114,19 +115,12 @@ def build_dataloader(
 ) -> tuple[DataLoader, DataLoader, DataLoader]:
     data_collator = PersonalizedDialogueGenerationDataCollator()
 
-    train_loader = DataLoader(
-        dataset=training_dataset,
-        batch_size=batch_size,
-        num_workers=num_workers,
-        shuffle=True,
-        # sampler=ClassAwareSampler(
-        #     nclass=len(COHERENCE_RELATIONS),
-        #     cls_data_list=initializer.get_tagtrain_index_dic(),
-        #     gt_labels=tag_train_data.gt_labels,
-        #     seed=args.seed,
-        # ),
-        collate_fn=data_collator,
-        pin_memory=True)
+    train_loader = DataLoader(dataset=training_dataset,
+                              batch_size=batch_size,
+                              num_workers=num_workers,
+                              shuffle=True,
+                              collate_fn=data_collator,
+                              pin_memory=True)
     valid_loader = DataLoader(dataset=validation_dataset,
                               batch_size=batch_size,
                               num_workers=num_workers,
@@ -245,7 +239,6 @@ def main(args: argparse.Namespace):
     model = build_model(args=model_arguments)
     model = model.to(device)
     model.resize_token_embeddings(len(tokenizer))
-    # model.add_soft_prompt()
     logger.info('Building Personalized Dialogue Generator model')
 
     # Build trainer
