@@ -1,16 +1,9 @@
 import argparse
-import sys
 
 import evaluate
 import numpy as np
 import pandas as pd
-
-# from sklearn.metrics import f1_score
-# from spacy.lang.en import English
-# from spacy.tokenizer import Tokenizer
 from tqdm import tqdm
-
-sys.path.append('.')
 
 from utils.metrics import (
     BARTScorer,
@@ -97,10 +90,10 @@ def main(args: argparse.Namespace):
     bert_score_r = np.mean(bert_score['recall'])
     bert_score_f1 = np.mean(bert_score['f1'])
 
-    consist_scorer = ConsistencyScorer(device='cuda',
-                                       checkpoint='zayn1111/deberta-v3-dnli')
-    # consist_scorer = ConsistencyScorerV2(device='cuda',
-    #                                      checkpoint='baseline/consistent_model')
+    # consist_scorer = ConsistencyScorer(device='cuda',
+    #                                    checkpoint='zayn1111/deberta-v3-dnli')
+    consist_scorer = ConsistencyScorerV2(device='cuda',
+                                         checkpoint='consistent_model')
 
     keywords = pd.read_json('dataset/ConvAI2/valid_self_original_keyword.json')
     keywords['query'] = keywords['dialogues'].str[-1]
@@ -109,7 +102,6 @@ def main(args: argparse.Namespace):
     if len(prediction_sentences) < len(keywords):
         for gt_resp in reference_sentences:
             f = keywords[keywords['query'].str == gt_resp.lower()]
-            print(f)
             filter_keywords.append(f.iloc[0])
 
         keywords = pd.DataFrame(filter_keywords)
@@ -126,7 +118,7 @@ def main(args: argparse.Namespace):
             for k in qk['labels']:
                 qk_consist_score = consist_scorer.compute(pred_response, k)
                 index = np.argmax(list(qk_consist_score.values()))
-                # qk_consist_sum.append(NLI_SCORES[index])
+                qk_consist_sum.append(NLI_SCORES[index])
                 if index == 0:
                     qk_consist_sum.append(1)
                 else:
@@ -136,7 +128,7 @@ def main(args: argparse.Namespace):
         for k in persona_keyword[-2]['labels']:
             pk_consist_score = consist_scorer.compute(pred_response, k)
             index = np.argmax(list(pk_consist_score.values()))
-            # pk_consist_sum.append(NLI_SCORES[index])
+            pk_consist_sum.append(NLI_SCORES[index])
             if index == 0:
                 pk_consist_sum.append(1)
             else:
@@ -188,10 +180,10 @@ def main(args: argparse.Namespace):
     print('Computing consistency metrics: Persona-Consistency (C.Score)...')
 
     if consist_scorer is None:
-        consist_scorer = ConsistencyScorer(
-            device='cuda', checkpoint='zayn1111/deberta-v3-dnli')
-        # consist_scorer = ConsistencyScorerV2(
-        #     device='cuda', checkpoint='baseline/consistent_model')
+        # consist_scorer = ConsistencyScorer(
+        #     device='cuda', checkpoint='zayn1111/deberta-v3-dnli')
+        consist_scorer = ConsistencyScorerV2(
+            device='cuda', checkpoint='consistent_model')
 
     persona_sentences = data['persona'].tolist()
     persona_sentences_combined = [' '.join(p) for p in persona_sentences]
