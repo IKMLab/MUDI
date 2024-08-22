@@ -118,13 +118,17 @@ The `dataset` folder should be organized as follows:
 
 In order to pre-train the Dialogue Graph Encoder, you can run the following code:
 
-`sh scripts/pretrain_gnn.sh`
+```
+sh scripts/pretrain_gnn.sh
+```
 
 ### Fine-tuning
 
 Please indicate the path to the pre-trained Dialogue Graph Encoder in the `--pretrained_model_path` argument. You can run the following code to fine-tune the Dialogue Graph Encoder:
 
-`sh scripts/train_gnn.sh`
+```bash
+sh scripts/train_gnn.sh
+```
 
 | Argument                           | Explanation                                                                                               |
 | ---------------------------------- | --------------------------------------------------------------------------------------------------------- |
@@ -175,7 +179,9 @@ Please indicate the path to the pre-trained Dialogue Graph Encoder in the `--pre
 Please indicate the path to the Dialogue Graph Encoder in the `--pretrained_dialogue_encoder_weights_path` argument.
 You can run the following code to train the generator:
 
-`sh scripts/train_generator.sh`
+```bash
+sh scripts/train_generator.sh
+```
 
 | Argument                                               | Explanation                                                                                               |
 | ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
@@ -218,10 +224,14 @@ You can run the following code to train the generator:
 | `--next_resp_type_direct_weight`                     | Loss weight for next response type prediction. Default is 1.0.                                            |
 | `--next_resp_type_seq_weight`                        | Loss weight for next response type prediction. Default is 1.0.                                            |
 | `--endure_times`                                     | The maximum endure epochs of loss increasing on validation. Default is 10.                                |
+| `--coherence_attn_strategy`   | Coherence attention strategy. Choices are 'SP', 'Emb', 'SP+Emb'. Default is 'SP+Emb'.                |
+| `--graph_encoder_strategy`    | Graph encoder strategy. Choices are 'Attn', 'Add', 'C', 'P', 'Random', 'None'. Default is 'Attn'.   |
 
-## Inference (Generate the Personzied Response)
+## Inference (Personzied Response Generation)
 
-`sh scripts/generate.sh -m <model_name_or_path>`
+```
+sh scripts/generate.sh -m <model_name_or_path>
+```
 
 | Argument                             | Explanation                                                                                               |
 | ------------------------------------ | --------------------------------------------------------------------------------------------------------- |
@@ -241,6 +251,9 @@ You can run the following code to train the generator:
 | `--pretrained_utterance_encoder`   | Pretrained model for utterance/persona encoder. Choices are 'none', 'bert', 'roberta'. Default is 'none'. |
 | `--tau`                            | Temperature parameter for sampling in dialogue generation. Default is 0.2.                                |
 | `--top_k_relations`                | Number of top relations to consider for generating responses. Default is 3.                               |
+| `--coherence_attn_strategy`   | Coherence attention strategy. Choices are 'SP', 'Emb', 'SP+Emb'. Default is 'SP+Emb'.                |
+| `--graph_encoder_strategy`    | Graph encoder strategy. Choices are 'Attn', 'Add', 'C', 'P', 'Random', 'None'. Default is 'Attn'.   |
+
 
 ## Evaluation
 
@@ -263,9 +276,70 @@ The structure of the root directory should be as follows:
 
 In order to evaluate the quality of the generated responses, you can run the following code:
 
-`sh scripts/evaluate.sh  -i <generated_responses_file_path> -o <output_csv_file_path>`
+```bash
+sh scripts/evaluate.sh  -i <generated_responses_file_path> -o <output_csv_file_path>
+```
+
+* All the evaluation metrics are saved in the csv file.
 
 | Argument                       | Explanation                                                 |
 | ------------------------------ | ----------------------------------------------------------- |
 | `-i`, `--input_file_path`  | Path to the data for evaluation.**Required.**         |
 | `-o`, `--output_file_path` | Path where evaluation outputs are saved.**Required.** |
+
+## Analysis
+### The Effect of proposed DialogueGAT
+
+To validate the performance of the proposed DialogueGAT compared with existing GNN methods in Dialogue Graph modeling, we analyze results in the Next Response Type Prediction (NRTP) and Coherence Relations Classification (RC) tasks on the validation set.
+
+1. You can run the `train_gnn.sh` script and change the `GNN_LAYER_TYPE` variable to `GATv2` to train the GATv2 model, or `DialogueGAT` to train the DialogueGAT model:
+
+    ```bash
+    sh scripts/train_gnn.sh
+    ```
+
+    * We report the best results on validation set of using the GATv2 and DialogueGAT models.
+
+![](assets/compare_gatv2_dialoguegat.png)
+
+### The Effect of τ Values in Dynamic Weighted Aggregation
+
+1. You can run the `generate.sh` and change `TAU` variable to evaluate the effect of τ values in dynamic weighted aggregation:
+
+    ```bash
+    sh scripts/generate.sh -m <model_name_or_path>
+    ```
+
+2. After generating the responses, you can run the evaluation script [evaluate.sh](#Evaluation) to evaluate the generated responses.
+
+![](assets/effectiveness_of_tau.png)
+
+### The Effect of Dialogue Graph Encoder
+
+When training the Generator, we will use the Dialogue Graph Encoder to encode the dialogue graph, and get the coherence-aware dialogue embeddings. Thus, we would like to analyze the effectiveness of the Dialogue Graph Encoder and Attention-based Feature-fusion Strategy.
+
+You can run the `train_generator.sh` script and change the `GRAPH_ENCODER_STRATEGY` variable to `Attn`, `Add`, `C`, `P`, `Random`, or `None` to train the generator with different strategies of the Dialogue Graph Encoder output:
+
+```bash
+sh scripts/train_generator.sh
+```
+
+![](assets/effectiveness_of_dialogue_graph_encoder.png)
+
+### The Difference Strategy of Coherence-aware Attention
+In our model, we propose two strategies for coherence-aware attention: SP and Emb. We analyze the performance of these two strategies in each evaluation metric (report in the main results).
+
+#### Training the Generator
+You can run the `train_generator.sh` script and change the `COHERENCE_ATTN_STRATEGY` variable to `SP`, `Emb`, or `SP+Emb` to train the generator with different strategies:
+
+```bash
+sh scripts/train_generator.sh
+```
+
+#### Inference (Personalized Response Generation)
+When the inference stage, you also can change the `COHERENCE_ATTN_STRATEGY` variable to `SP`, `Emb`, or `SP+Emb` to generate responses with different attention strategies:
+
+```bash
+sh scripts/generate.sh -m <model_name_or_path>
+```
+
