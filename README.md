@@ -2,10 +2,17 @@
 
 ![](assets/mudi.png)
 
-## Environment Setup
+## Installation and Environment Setup
 
 * Python: >=3.9
 * Required packages: follow the `requirements.txt` file.
+
+1. Clone this repository:
+
+   ```bash
+    git clone https://github.com/IKM-graduates/master_thesis_ChihHao_Hsu_P76114503.git
+    cd master_thesis_ChihHao_Hsu_P76114503
+   ```
 
 1. Create a new conda environment and activate it:
 
@@ -33,7 +40,7 @@ You can also download the dataset manually and put it in the `dataset/RCC/` and 
 
   * In our experiments, we use the 'original' version of the ConvAI2 dataset. But you can also use the 'revised' versions of the ConvAI2 dataset.
 
-  * We provide the coherence annotated ConvAI2 dataset in the `dataset/ConvAI2/llama3/` and  `dataset/ConvAI2/mixtral/` directories. 
+  * We provide the coherence annotated ConvAI2 dataset in the `dataset/ConvAI2/llama3/` and  `dataset/ConvAI2/mixtral/` directories.
 
 
 The `dataset` folder should be organized as follows:
@@ -165,7 +172,7 @@ Please indicate the path to the pre-trained Dialogue Graph Encoder in the `--pre
 
 ## Generator Training
 
-Please indicate the path to the Dialogue Graph Encoder in the --pretrained_dialogue_encoder_weights_path argument.
+Please indicate the path to the Dialogue Graph Encoder in the `--pretrained_dialogue_encoder_weights_path` argument.
 You can run the following code to train the generator:
 
 `sh scripts/train_generator.sh`
@@ -240,6 +247,19 @@ You can run the following code to train the generator:
 We have used the exisiting evaluation metrics to evaluate the generated responses. Please download the models and put them in the **root** directory.
 * [NLI](https://github.com/934865517zjk/SimOAP): consistent_model/
 * [BARTScore](https://github.com/neulab/BARTScore): bart_score.pth
+
+The structure of the root directory should be as follows:
+
+```
+.
+├── assets
+├── dataset
+├── scripts
+├── src
+├── consistent_model
+├── bart_score.pth
+├── ...
+```
 
 In order to evaluate the quality of the generated responses, you can run the following code:
 
