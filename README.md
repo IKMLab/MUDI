@@ -4,6 +4,14 @@
 
 ## Installation and Environment Setup
 
+* OS: Ubuntu 22.04
+* GPU
+   * NVIDIA RTX 4090 VRAM 24GB 
+      * For Dialogue Graph Encoder training
+   * NVIDIA A100 VRAM 80GB
+      * For Generator training
+
+
 * Python: >=3.9
 * Required packages: follow the `requirements.txt` file.
 
@@ -31,6 +39,14 @@
 You could simply download the all dataset from the following link:
 - [💾 Google Drive](https://drive.google.com/drive/folders/1gb6EACub9UJIX00OU_zRqhkdUre6gBIu?usp=drive_link)
 
+   ```bash
+   # from Google Drive
+   # https://drive.google.com/file/d/1nscytAhDEPdDCn5K9nfT7d_RFTXoQZcZ/view?usp=drive_link
+   pip install gdown
+   gdown --id 1nscytAhDEPdDCn5K9nfT7d_RFTXoQZcZ
+   unzip dataset.zip
+   ```
+
 You can also download the dataset manually and put it in the `dataset/RCC/` and `dataset/ConvAI2/` directories.
 
 * **RCC**: We utilize the Reddit Coherence Chain (RCC) dataset, a large-scale chit-chat dialogue dataset designed for dialogue alignment in the pre-training phase of our Dialogue Graph Encoder. The RCC dataset can be accessed  [here](https://github.com/nouhadziri/THRED).
@@ -40,7 +56,7 @@ You can also download the dataset manually and put it in the `dataset/RCC/` and 
 
   * In our experiments, we use the 'original' version of the ConvAI2 dataset. But you can also use the 'revised' versions of the ConvAI2 dataset.
 
-  * We provide the coherence annotated ConvAI2 dataset in the `dataset/ConvAI2/llama3/` and  `dataset/ConvAI2/mixtral/` directories.
+  * We provide the coherence annotated ConvAI2 dataset in the `dataset/ConvAI2/llama3/` and  `dataset/ConvAI2/mixtral/` directories. ([Google Drive](https://drive.google.com/drive/folders/1gb6EACub9UJIX00OU_zRqhkdUre6gBIu?usp=drive_link))
 
 
 The `dataset` folder should be organized as follows:
