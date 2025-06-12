@@ -18,8 +18,8 @@
 1. Clone this repository:
 
    ```bash
-    git clone https://github.com/IKM-graduates/master_thesis_ChihHao_Hsu_P76114503.git
-    cd master_thesis_ChihHao_Hsu_P76114503
+    git clone https://github.com/IKMLab/MUDI
+    cd MUDI
    ```
 
 1. Create a new conda environment and activate it:
